@@ -76,6 +76,11 @@ func main() {
 			Name:  "insecure, I",
 			Usage: "Disable SSL/TLS Certificate check (for some OS without ca-certificates)",
 		},
+		cli.StringFlag{
+			Name:  "edns, e",
+			Usage: "Extension mechanisms for DNS (EDNS) is parameters of the Domain Name System (DNS) protocol.",
+		},
+
 		cli.BoolFlag{
 			Name:  "udp, U",
 			Usage: "Listen on UDP",
@@ -100,10 +105,11 @@ func main() {
 		}
 
 		gdnsOPT := gdns.GDNSOptions{
-			EndpointIPs: []net.IP{net.ParseIP("1.1.1.1"), net.ParseIP("1.0.0.1")},
+			EndpointIPs: []net.IP{net.ParseIP("210.17.9.228")},
+			EDNS:        c.String("edns"),
 			Secure:      !c.Bool("insecure"),
 		}
-		gdnsEndPT := `https://cloudflare-dns.com/dns-query?ct=application/dns-json`
+		gdnsEndPT := `https://dns.twnic.tw/dns-query`
 
 		outProvider, err := gdns.NewGDNSProvider(gdnsEndPT, &gdnsOPT)
 		if err != nil {
