@@ -12,13 +12,13 @@ if hash upx 2>/dev/null; then
 	UPX=true
 fi
 
-VERSION=`git rev-parse --short HEAD`
+VERSION=$(git rev-parse --short HEAD)
 LDFLAGS="-X main.version=$VERSION -s -w -linkmode external -extldflags -static"
 GCFLAGS=""
 
 # X86
 OSES=(windows linux darwin freebsd)
-ARCHS=(amd64 386)
+ARCHS=(amd64)
 rm -rf ./release
 mkdir -p ./release
 for os in ${OSES[@]}; do
@@ -41,7 +41,7 @@ for v in ${ARMS[@]}; do
 	env CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=$v go build -ldflags "$LDFLAGS" -gcflags "$GCFLAGS" -o ./release/${name}_arm$v .
 done
 if $UPX; then upx -9 ./release/${name}_arm*; fi
-tar -C ./release -zcf ./release/${name}_arm-$VERSION.tar.gz $(for v in ${ARMS[@]}; do echo -n "./${name}_arm$v ";done)
+tar -C ./release -zcf ./release/${name}_arm-$VERSION.tar.gz $(for v in ${ARMS[@]}; do echo -n "./${name}_arm$v "; done)
 $MD5 ./release/${name}_arm-$VERSION.tar.gz
 
 # MIPS # go 1.8+ required

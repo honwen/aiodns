@@ -1,5 +1,5 @@
 ### Source
-- https://github.com/chenhw2/aiodns
+- https://github.com/honwen/aiodns
   
 ### Thanks
 - https://github.com/fardog/secureoperator
@@ -8,7 +8,7 @@
 - https://developers.google.com/speed/public-dns/docs/dns-over-https
   
 ### Docker
-- https://hub.docker.com/r/chenhw2/aiodns
+- https://hub.docker.com/r/honwen/aiodns
   
 ### TODO
 - Currently only Block DNS TYPE:```ANY```
@@ -17,17 +17,17 @@
   
 ### Usage
 ```
-$ docker pull chenhw2/aiodns
+$ docker pull honwen/aiodns
 
 $ docker run -d \
     -p "5300:5300/udp" \
     -p "5300:5300/tcp" \
-    chenhw2/aiodns
+    honwen/aiodns
 
 ```
 ### Help
 ```
-$ docker run --rm chenhw2/aiodns -h
+$ docker run --rm honwen/aiodns -h
 NAME:
    AIO DNS - All In One Clean DNS Solution.
 

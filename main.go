@@ -11,9 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/chenhw2/aiodns/autodns"
-	"github.com/chenhw2/dnspod-http-dns/dnspod"
-	"github.com/chenhw2/https-dns/gdns"
+	"github.com/honwen/aiodns/autodns"
+	"github.com/honwen/dnspod-http-dns/dnspod"
+	"github.com/honwen/https-dns/gdns"
 	"github.com/golang/glog"
 	"github.com/miekg/dns"
 	"github.com/urfave/cli"
