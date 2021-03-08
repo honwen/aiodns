@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"math/rand"
-	"net"
 	"os"
 	"os/signal"
 	"runtime"
@@ -11,10 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/honwen/aiodns/autodns"
-	"github.com/honwen/dnspod-http-dns/dnspod"
-	"github.com/honwen/https-dns/gdns"
+	"github.com/AdguardTeam/dnsproxy/upstream"
 	"github.com/golang/glog"
+	"github.com/honwen/aiodns/autodns"
 	"github.com/miekg/dns"
 	"github.com/urfave/cli"
 )
@@ -22,8 +20,12 @@ import (
 var (
 	version = "MISSING build version [git hash]"
 
-	outHandler *gdns.Handler
-	inHandler  *dnspod.DNSPOD
+	defaultInUpstrem  = new(cli.StringSlice)
+	defaultOutUpstrem = new(cli.StringSlice)
+	defaultBootstraps = new(cli.StringSlice)
+
+	outHandler *Handler
+	inHandler  *Handler
 
 	listenAddress   string
 	listenProtocols []string
@@ -53,11 +55,24 @@ func serve(net, addr string) {
 }
 
 func init() {
-	rand.Seed(time.Now().UTC().UnixNano())
-}
-
-func init() {
 	rand.Seed(time.Now().UnixNano())
+
+	defaultInUpstrem.Set("tls://dns.pub")
+	defaultInUpstrem.Set("tls://223.6.6.6")
+	defaultInUpstrem.Set("https://doh.pub/dns-query")
+	defaultInUpstrem.Set("https://dns.alidns.com/dns-query")
+
+	defaultOutUpstrem.Set("tls://dns.google")
+	defaultOutUpstrem.Set("tls://162.159.36.1")
+	defaultOutUpstrem.Set("tls://dns.adguard.com")
+	// defaultOutUpstrem.Set("quic://dns.adguard.com")
+	defaultOutUpstrem.Set("https://dns.google/dns-query")
+	defaultOutUpstrem.Set("https://doh.dns.sb/dns-query")
+	defaultOutUpstrem.Set("https://cloudflare-dns.com/dns-query")
+
+	defaultBootstraps.Set("tls://223.5.5.5")
+	defaultBootstraps.Set("tls://1.0.0.1")
+	defaultBootstraps.Set("114.114.115.115")
 }
 
 func main() {
@@ -72,14 +87,37 @@ func main() {
 			Value: ":5300",
 			Usage: "Serve address",
 		},
+		cli.StringSliceFlag{
+			Name:  "ou, o",
+			Value: defaultOutUpstrem,
+			Usage: "Outside Upstreams",
+		},
+		cli.StringSliceFlag{
+			Name:  "iu, i",
+			Value: defaultInUpstrem,
+			Usage: "Inside Upstreams",
+		},
+		cli.StringSliceFlag{
+			Name:  "bootstrap, b",
+			Value: defaultBootstraps,
+			Usage: "Bootstrap Upstreams",
+		},
 		cli.BoolFlag{
 			Name:  "insecure, I",
-			Usage: "Disable SSL/TLS Certificate check (for some OS without ca-certificates)",
+			Usage: "If specified, disable SSL/TLS Certificate check (for some OS without ca-certificates)",
 		},
-		cli.StringFlag{
-			Name:  "edns, e",
-			Usage: "Extension mechanisms for DNS (EDNS) is parameters of the Domain Name System (DNS) protocol.",
+		cli.BoolFlag{
+			Name:  "ipv6-disabled",
+			Usage: "If specified, all AAAA requests will be replied with NoError RCode and empty answer",
 		},
+		cli.BoolFlag{
+			Name:  "refuse-any",
+			Usage: "If specified, refuse ANY requests",
+		},
+		// cli.StringFlag{
+		// 	Name:  "edns, e",
+		// 	Usage: "Extension mechanisms for DNS (EDNS) is parameters of the Domain Name System (DNS) protocol.",
+		// },
 
 		cli.BoolFlag{
 			Name:  "udp, U",
@@ -104,20 +142,36 @@ func main() {
 			os.Exit(0)
 		}
 
-		gdnsOPT := gdns.GDNSOptions{
-			EndpointIPs: []net.IP{net.ParseIP("210.17.9.228")},
-			EDNS:        c.String("edns"),
-			Secure:      !c.Bool("insecure"),
-		}
-		gdnsEndPT := `https://dns.twnic.tw/dns-query`
-
-		outProvider, err := gdns.NewGDNSProvider(gdnsEndPT, &gdnsOPT)
-		if err != nil {
-			glog.Exitln(err)
+		upstreamOptions := upstream.Options{
+			Bootstrap:          c.StringSlice("bootstrap"),
+			Timeout:            3333 * time.Millisecond,
+			InsecureSkipVerify: c.Bool("insecure"),
 		}
 
-		outHandler = gdns.NewHandler(outProvider, new(gdns.HandlerOptions))
-		inHandler = dnspod.NewDNSPOD("")
+		handlerOptions := HandlerOptions{
+			blockANY:  true,
+			blockAAAA: false,
+			edns:      "14.17.0.0",
+		}
+
+		var (
+			ou   = c.StringSlice("ou")
+			iu   = c.StringSlice("iu")
+			outs []upstream.Upstream
+			ins  []upstream.Upstream
+		)
+
+		for i := range ou {
+			out, _ := upstream.AddressToUpstream(ou[i], upstreamOptions)
+			outs = append(outs, out)
+		}
+		outHandler = NewHandler(outs, handlerOptions)
+
+		for i := range iu {
+			in, _ := upstream.AddressToUpstream(iu[i], upstreamOptions)
+			ins = append(ins, in)
+		}
+		inHandler = NewHandler(ins, handlerOptions)
 
 		if !strings.HasPrefix(version, "MISSING") {
 			fmt.Fprintf(os.Stderr, "%s %s\n", strings.ToUpper(c.App.Name), c.App.Version)
@@ -128,7 +182,7 @@ func main() {
 	app.Run(os.Args)
 	defer glog.Flush()
 
-	autoDNS := autodns.NewAutoDNS(inHandler.DNSHandleFunc, outHandler.Handle, "")
+	autoDNS := autodns.NewAutoDNS(inHandler.HandleFunc, outHandler.HandleFunc, "")
 	dns.HandleFunc(".", autoDNS.HandleFunc)
 
 	// start the servers

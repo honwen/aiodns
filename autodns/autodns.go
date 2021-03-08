@@ -25,23 +25,21 @@ type AutoDNS struct {
 }
 
 // NewAutoDNS creates a AutoDNS
-func NewAutoDNS(inside, outside func(dns.ResponseWriter, *dns.Msg), outsideListSuffix string) (ad *AutoDNS) {
-	ad = &AutoDNS{
+func NewAutoDNS(inside, outside func(dns.ResponseWriter, *dns.Msg), outsideListSuffix string) (autod *AutoDNS) {
+	autod = &AutoDNS{
 		insideHandleFunc:  inside,
 		outsideHandleFunc: outside,
 	}
 	if 0 == len(outsideListSuffix) {
-		ad.outsideListIndex = suffixarray.New([]byte(outsideList))
+		autod.outsideListIndex = suffixarray.New([]byte(outsideList))
 	} else {
-		ad.outsideListIndex = suffixarray.New([]byte(outsideListSuffix))
+		autod.outsideListIndex = suffixarray.New([]byte(outsideListSuffix))
 	}
-
 	return
 }
 
 // HandleFunc auto handles DNS request
-func (ad *AutoDNS) HandleFunc(w dns.ResponseWriter, req *dns.Msg) {
-	var err error
+func (autod *AutoDNS) HandleFunc(w dns.ResponseWriter, req *dns.Msg) {
 	/* any questions? */
 	if len(req.Question) < 1 {
 		return
@@ -51,29 +49,22 @@ func (ad *AutoDNS) HandleFunc(w dns.ResponseWriter, req *dns.Msg) {
 	rmsg.SetReply(req)
 	q := req.Question[0]
 	switch q.Qtype {
-	case dns.TypeA:
+	case dns.TypeA, dns.TypeAAAA:
 		glog.V(LINFO).Infoln("requesting:", q.Name, dns.TypeToString[q.Qtype])
 
 		for qName := q.Name[:len(q.Name)-1]; strings.Count(qName, `.`) > 0; qName = qName[strings.Index(qName, `.`)+1:] {
-			offsets := ad.outsideListIndex.Lookup([]byte(qName), 1)
+			offsets := autod.outsideListIndex.Lookup([]byte(qName), 1)
 			if len(offsets) > 0 {
 				glog.V(LDEBUG).Infoln(qName, "Hit OutsideList")
-				ad.outsideHandleFunc(w, req)
+				autod.outsideHandleFunc(w, req)
 				return
 			}
 		}
-		ad.insideHandleFunc(w, req)
+		autod.insideHandleFunc(w, req)
 		return
-	case dns.TypeANY:
-		glog.V(LINFO).Infoln("request-block", q.Name, dns.TypeToString[q.Qtype])
 	default:
 		glog.V(LINFO).Infoln("requesting:", q.Name, dns.TypeToString[q.Qtype])
-		ad.outsideHandleFunc(w, req)
+		autod.outsideHandleFunc(w, req)
 		return
-	}
-
-	// fmt.Println(rmsg)
-	if err = w.WriteMsg(rmsg); nil != err {
-		glog.V(LINFO).Infoln("Response faild, rmsg:", err)
 	}
 }
