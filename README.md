@@ -2,13 +2,10 @@
 - https://github.com/honwen/aiodns
   
 ### Thanks
-- https://github.com/fardog/secureoperator
-- https://github.com/shadowsocks/go-shadowsocks2
-- https://developers.cloudflare.com/1.1.1.1/dns-over-https/
-- https://developers.google.com/speed/public-dns/docs/dns-over-https
+- https://github.com/AdguardTeam/dnsproxy
   
 ### Docker
-- https://hub.docker.com/r/honwen/aiodns
+- https://hub.docker.com/r/chenhw2/aiodns
   
 ### TODO
 - Currently only Block DNS TYPE:```ANY```
@@ -17,17 +14,17 @@
   
 ### Usage
 ```
-$ docker pull honwen/aiodns
+$ docker pull chenhw2/aiodns
 
 $ docker run -d \
     -p "5300:5300/udp" \
     -p "5300:5300/tcp" \
-    honwen/aiodns
+    chenhw2/aiodns
 
 ```
 ### Help
 ```
-$ docker run --rm honwen/aiodns -h
+$ docker run --rm chenhw2/aiodns -h
 NAME:
    AIO DNS - All In One Clean DNS Solution.
 
@@ -38,16 +35,20 @@ VERSION:
    Git:[MISSING BUILD VERSION [GIT HASH]] (go version)
 
 COMMANDS:
-     help, h  Shows a list of commands or help for one command
+   help, h  Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:
-   --listen value, -l value  Serve address (default: ":5300")
-   --insecure, -I            Disable SSL/TLS Certificate check (for some OS without ca-certificates)
-   --udp, -U                 Listen on UDP
-   --tcp, -T                 Listen on TCP
-   -V value                  log level for V logs (default: 2)
-   --logtostderr             log to standard error instead of files
-   --help, -h                show help
-   --version, -v             print the version
-
+   --listen value, -l value     Serve address (default: ":5300")
+   --ou value, -o value         Outside Upstreams (default: "tls://dns.google", "tls://162.159.36.1", "tls://dns.adguard.com", "https://dns.google/dns-query", "https://doh.dns.sb/dns-query", "https://cloudflare-dns.com/dns-query")
+   --iu value, -i value         Inside Upstreams (default: "tls://dns.pub", "tls://223.6.6.6", "https://doh.pub/dns-query", "https://dns.alidns.com/dns-query")
+   --bootstrap value, -b value  Bootstrap Upstreams (default: "tls://223.5.5.5", "tls://1.0.0.1", "114.114.115.115")
+   --insecure, -I               If specified, disable SSL/TLS Certificate check (for some OS without ca-certificates)
+   --ipv6-disabled              If specified, all AAAA requests will be replied with NoError RCode and empty answer
+   --refuse-any                 If specified, refuse ANY requests
+   --udp, -U                    Listen on UDP
+   --tcp, -T                    Listen on TCP
+   -V value                     log level for V logs (default: 2)
+   --logtostderr                log to standard error instead of files
+   --help, -h                   show help
+   --version, -v                print the version
 ```

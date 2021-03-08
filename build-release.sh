@@ -12,7 +12,7 @@ if hash upx 2>/dev/null; then
 	UPX=true
 fi
 
-VERSION=$(git rev-parse --short HEAD)
+VERSION=$(curl -sSL https://api.github.com/repos/honwen/aiodns/commits/master | sed -n '{/sha/p; /date/p;}'| sed 's/.* \"//g' | cut -c1-10 | tr '[:lower:]' '[:upper:]' | sed 'N;s/\n/@/g' | head -1)
 LDFLAGS="-X main.version=$VERSION -s -w -linkmode external -extldflags -static"
 GCFLAGS=""
 
