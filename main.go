@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"net"
 	"os"
 	"os/signal"
 	"runtime"
@@ -64,7 +65,7 @@ func init() {
 
 	defaultOutUpstrem.Set("tls://dns.google")
 	defaultOutUpstrem.Set("tls://162.159.36.1")
-	defaultOutUpstrem.Set("tls://dns.adguard.com")
+	// defaultOutUpstrem.Set("tls://dns.adguard.com")
 	// defaultOutUpstrem.Set("quic://dns.adguard.com")
 	defaultOutUpstrem.Set("https://dns.google/dns-query")
 	defaultOutUpstrem.Set("https://doh.dns.sb/dns-query")
@@ -114,10 +115,14 @@ func main() {
 			Name:  "refuse-any",
 			Usage: "If specified, refuse ANY requests",
 		},
-		// cli.StringFlag{
-		// 	Name:  "edns, e",
-		// 	Usage: "Extension mechanisms for DNS (EDNS) is parameters of the Domain Name System (DNS) protocol.",
-		// },
+		cli.StringFlag{
+			Name:  "out-edns, oe",
+			Usage: "Send EDNS Client Address to Outside Upstreams",
+		},
+		cli.StringFlag{
+			Name:  "in-edns, ie",
+			Usage: "Send EDNS Client Address to Inside Upstreams",
+		},
 
 		cli.BoolFlag{
 			Name:  "udp, U",
@@ -142,6 +147,10 @@ func main() {
 			os.Exit(0)
 		}
 
+		if !strings.HasPrefix(version, "MISSING") {
+			fmt.Fprintf(os.Stderr, "%s %s\n", strings.ToUpper(c.App.Name), c.App.Version)
+		}
+
 		upstreamOptions := upstream.Options{
 			Bootstrap:          c.StringSlice("bootstrap"),
 			Timeout:            3333 * time.Millisecond,
@@ -149,9 +158,8 @@ func main() {
 		}
 
 		handlerOptions := HandlerOptions{
-			blockANY:  true,
-			blockAAAA: false,
-			edns:      "14.17.0.0",
+			blockANY:  c.Bool("refuse-any"),
+			blockAAAA: c.Bool("ipv6-disabled"),
 		}
 
 		var (
@@ -162,20 +170,57 @@ func main() {
 		)
 
 		for i := range ou {
-			out, _ := upstream.AddressToUpstream(ou[i], upstreamOptions)
-			outs = append(outs, out)
+			if out, err := upstream.AddressToUpstream(ou[i], upstreamOptions); err == nil {
+				outs = append(outs, out)
+				glog.V(LINFO).Infof("parse outside-upstream: %s", ou[i])
+			} else {
+				glog.V(LWARNING).Infof("fail to parse outside-upstream %s", ou[i])
+				glog.V(LWARNING).Infoln(err)
+			}
 		}
-		outHandler = NewHandler(outs, handlerOptions)
+		if len(outs) > 0 {
+			hOptions := handlerOptions
+			edns := c.String("out-edns")
+			if ednsIP := net.ParseIP(edns); ednsIP != nil {
+				glog.V(LDEBUG).Infof("parsed out-EDNS: %s", edns)
+				hOptions.edns = &ednsIP
+			} else {
+				if len(edns) > 0 {
+					glog.V(LWARNING).Infof("cannot parse out-EDNS: %s", edns)
+				}
+			}
+			outHandler = NewHandler(outs, hOptions)
+		} else {
+			glog.V(LDEBUG).Infoln("No Valid outside-upstrea")
+			os.Exit(0)
+		}
 
 		for i := range iu {
-			in, _ := upstream.AddressToUpstream(iu[i], upstreamOptions)
-			ins = append(ins, in)
+			if in, err := upstream.AddressToUpstream(iu[i], upstreamOptions); err == nil {
+				ins = append(ins, in)
+				glog.V(LINFO).Infof("parse inside-upstream: %s", iu[i])
+			} else {
+				glog.V(LWARNING).Infof("fail to parse inside-upstream %s", iu[i])
+				glog.V(LWARNING).Infoln(err)
+			}
 		}
-		inHandler = NewHandler(ins, handlerOptions)
+		if len(ins) > 0 {
+			hOptions := handlerOptions
+			edns := c.String("in-edns")
+			if ednsIP := net.ParseIP(edns); ednsIP != nil {
+				glog.V(LDEBUG).Infof("parsed in-EDNS: %s", edns)
+				hOptions.edns = &ednsIP
+			} else {
+				if len(edns) > 0 {
+					glog.V(LWARNING).Infof("cannot parse in-EDNS: %s", edns)
+				}
+			}
+			inHandler = NewHandler(ins, hOptions)
+		} else {
+			glog.V(LDEBUG).Infoln("No Valid inside-upstrea")
+			os.Exit(0)
+		}
 
-		if !strings.HasPrefix(version, "MISSING") {
-			fmt.Fprintf(os.Stderr, "%s %s\n", strings.ToUpper(c.App.Name), c.App.Version)
-		}
 		return nil
 	}
 	app.Flags = append(app.Flags, glogGangstaFlags...)

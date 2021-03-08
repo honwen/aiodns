@@ -50,20 +50,19 @@ func (autod *AutoDNS) HandleFunc(w dns.ResponseWriter, req *dns.Msg) {
 	q := req.Question[0]
 	switch q.Qtype {
 	case dns.TypeA, dns.TypeAAAA:
-		glog.V(LINFO).Infoln("requesting:", q.Name, dns.TypeToString[q.Qtype])
-
 		for qName := q.Name[:len(q.Name)-1]; strings.Count(qName, `.`) > 0; qName = qName[strings.Index(qName, `.`)+1:] {
 			offsets := autod.outsideListIndex.Lookup([]byte(qName), 1)
 			if len(offsets) > 0 {
-				glog.V(LDEBUG).Infoln(qName, "Hit OutsideList")
+				glog.V(LDEBUG).Infoln("requesting-outside:", q.Name, dns.TypeToString[q.Qtype])
 				autod.outsideHandleFunc(w, req)
 				return
 			}
 		}
+		glog.V(LDEBUG).Infoln("requesting-inside:", q.Name, dns.TypeToString[q.Qtype])
 		autod.insideHandleFunc(w, req)
 		return
 	default:
-		glog.V(LINFO).Infoln("requesting:", q.Name, dns.TypeToString[q.Qtype])
+		glog.V(LINFO).Infoln("requesting-default:", q.Name, dns.TypeToString[q.Qtype])
 		autod.outsideHandleFunc(w, req)
 		return
 	}
