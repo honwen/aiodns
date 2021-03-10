@@ -1,6 +1,13 @@
 package main
 
-var specList = `
+var initSpecUpstreams = []string{
+	"[/dl.google.com/]tls://dns.adguard.com",
+	"[/dl.google.com/]tls://101.101.101.101",
+	"[/googleapis.cn/]tls://dns.adguard.com",
+	"[/googleapis.cn/]tls://101.101.101.101",
+}
+
+const specList = `
 blogspot.ad
 blogspot.ae
 blogspot.al

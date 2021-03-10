@@ -148,7 +148,7 @@ func main() {
 			options.CacheMinTTL = 600
 		}
 
-		options.Upstreams = c.StringSlice("upstream")
+		options.Upstreams = append(c.StringSlice("upstream"), initSpecUpstreams...)
 		options.Fallbacks = c.StringSlice("fallback")
 		options.BootstrapDNS = c.StringSlice("bootstrap")
 
