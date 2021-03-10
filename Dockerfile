@@ -18,9 +18,9 @@ COPY --from=builder /go/bin /usr/bin
 
 USER nobody
 
-ENV ARGS=
+ENV ARGS="-C -F -A -R -V"
 
 EXPOSE 5300
 EXPOSE 5300/udp
 
-CMD aiodns -T -U ${ARGS} --logtostderr -V 3
+CMD aiodns ${ARGS}
