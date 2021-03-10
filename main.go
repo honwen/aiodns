@@ -1,79 +1,61 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
-	"math/rand"
 	"net"
 	"os"
-	"os/signal"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
-	"syscall"
-	"time"
 
-	"github.com/AdguardTeam/dnsproxy/upstream"
-	"github.com/golang/glog"
-	"github.com/honwen/aiodns/autodns"
-	"github.com/miekg/dns"
+	"github.com/AdguardTeam/golibs/log"
 	"github.com/urfave/cli"
+	"gopkg.in/yaml.v3"
 )
 
 var (
 	version = "MISSING build version [git hash]"
 
-	defaultInUpstrem  = new(cli.StringSlice)
-	defaultOutUpstrem = new(cli.StringSlice)
-	defaultBootstraps = new(cli.StringSlice)
+	options = Options{
+		AllServers:       true,
+		EnableEDNSSubnet: true,
+	}
 
-	outHandler *Handler
-	inHandler  *Handler
-
-	listenAddress   string
-	listenProtocols []string
+	defaultUpstream = new(cli.StringSlice)
+	specUpstream    = new(cli.StringSlice)
+	fallUpstream    = new(cli.StringSlice)
+	bootUpstream    = new(cli.StringSlice)
 )
 
-func serve(net, addr string) {
-	glog.V(LINFO).Infof("starting %s service on %s", net, addr)
+func init() {
+	defaultUpstream.Set("tls://dns.pub")
+	defaultUpstream.Set("tls://223.6.6.6")
+	defaultUpstream.Set("https://doh.pub/dns-query")
+	defaultUpstream.Set("https://dns.alidns.com/dns-query")
 
-	sig := make(chan os.Signal)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	specUpstream.Set("tls://dns.google")
+	specUpstream.Set("tls://162.159.36.1")
+	// specUpstream.Set("tls://dns.adguard.com")
+	// specUpstream.Set("quic://dns.adguard.com")
+	specUpstream.Set("https://dns.google/dns-query")
+	specUpstream.Set("https://doh.dns.sb/dns-query")
+	specUpstream.Set("https://cloudflare-dns.com/dns-query")
 
-	server := &dns.Server{Addr: addr, Net: net, TsigSecret: nil}
-	go func() {
-		if err := server.ListenAndServe(); err != nil {
-			glog.Errorf("Failed to setup the %s server: %s\n", net, err.Error())
-			sig <- syscall.SIGTERM
-		}
-	}()
-
-	// serve until exit
-	<-sig
-
-	glog.V(LINFO).Infof("shutting down %s on interrupt\n", net)
-	if err := server.Shutdown(); err != nil {
-		glog.V(LERROR).Infof("got unexpected error %s", err.Error())
-	}
+	fallUpstream.Set("tls://dns.rubyfish.cn")
+	fallUpstream.Set("https://dns.rubyfish.cn/dns-query")
+	fallUpstream.Set("https://i.233py.com/dns-query")
+	bootUpstream.Set("tls://223.5.5.5")
+	bootUpstream.Set("tls://1.0.0.1")
+	bootUpstream.Set("114.114.115.115")
 }
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-
-	defaultInUpstrem.Set("tls://dns.pub")
-	defaultInUpstrem.Set("tls://223.6.6.6")
-	defaultInUpstrem.Set("https://doh.pub/dns-query")
-	defaultInUpstrem.Set("https://dns.alidns.com/dns-query")
-
-	defaultOutUpstrem.Set("tls://dns.google")
-	defaultOutUpstrem.Set("tls://162.159.36.1")
-	// defaultOutUpstrem.Set("tls://dns.adguard.com")
-	// defaultOutUpstrem.Set("quic://dns.adguard.com")
-	defaultOutUpstrem.Set("https://dns.google/dns-query")
-	defaultOutUpstrem.Set("https://doh.dns.sb/dns-query")
-	defaultOutUpstrem.Set("https://cloudflare-dns.com/dns-query")
-
-	defaultBootstraps.Set("tls://223.5.5.5")
-	defaultBootstraps.Set("tls://1.0.0.1")
-	defaultBootstraps.Set("114.114.115.115")
+func cliErrorExit(c *cli.Context, err error) {
+	fmt.Printf("%+v", err)
+	cli.ShowAppHelp(c)
+	os.Exit(-1)
 }
 
 func main() {
@@ -86,163 +68,120 @@ func main() {
 		cli.StringFlag{
 			Name:  "listen, l",
 			Value: ":5300",
-			Usage: "Serve address",
+			Usage: "Listening address",
 		},
 		cli.StringSliceFlag{
-			Name:  "ou, o",
-			Value: defaultOutUpstrem,
-			Usage: "Outside Upstreams",
+			Name:  "upstream, u",
+			Value: defaultUpstream,
+			Usage: "An upstream to be default used (can be specified multiple times)",
 		},
 		cli.StringSliceFlag{
-			Name:  "iu, i",
-			Value: defaultInUpstrem,
-			Usage: "Inside Upstreams",
+			Name:  "special-upstream, U",
+			Value: specUpstream,
+			Usage: "An upstream to be special used (can be specified multiple times)",
+		},
+		cli.StringSliceFlag{
+			Name:  "fallback, f",
+			Value: fallUpstream,
+			Usage: "Bootstrap DNS for DoH and DoT, can be specified multiple times",
 		},
 		cli.StringSliceFlag{
 			Name:  "bootstrap, b",
-			Value: defaultBootstraps,
-			Usage: "Bootstrap Upstreams",
+			Value: bootUpstream,
+			Usage: "Bootstrap DNS for DoH and DoT, can be specified multiple times",
+		},
+		cli.StringFlag{
+			Name:  "edns, e",
+			Usage: "Send EDNS Client Address to default upstreams",
+		},
+		cli.BoolFlag{
+			Name:  "cache, C",
+			Usage: "If specified, DNS cache is enabled",
 		},
 		cli.BoolFlag{
 			Name:  "insecure, I",
 			Usage: "If specified, disable SSL/TLS Certificate check (for some OS without ca-certificates)",
 		},
 		cli.BoolFlag{
-			Name:  "ipv6-disabled",
+			Name:  "ipv6-disabled, R",
 			Usage: "If specified, all AAAA requests will be replied with NoError RCode and empty answer",
 		},
 		cli.BoolFlag{
-			Name:  "refuse-any",
+			Name:  "refuse-any, A",
 			Usage: "If specified, refuse ANY requests",
 		},
-		cli.StringFlag{
-			Name:  "out-edns, oe",
-			Usage: "Send EDNS Client Address to Outside Upstreams",
-		},
-		cli.StringFlag{
-			Name:  "in-edns, ie",
-			Usage: "Send EDNS Client Address to Inside Upstreams",
-		},
-
 		cli.BoolFlag{
-			Name:  "udp, U",
-			Usage: "Listen on UDP",
+			Name:  "fastest-addr, F",
+			Usage: "If specified, Respond to A or AAAA requests only with the fastest IP address",
 		},
 		cli.BoolFlag{
-			Name:  "tcp, T",
-			Usage: "Listen on TCP",
+			Name:  "verbose, V",
+			Usage: "If specified, Verbose output",
 		},
 	}
+
 	app.Action = func(c *cli.Context) error {
-		glogGangstaShim(c)
-		listenAddress = c.String("listen")
-		if c.Bool("tcp") {
-			listenProtocols = append(listenProtocols, "tcp")
+		if host, port, err := net.SplitHostPort(c.String("listen")); err != nil {
+			cliErrorExit(c, err)
+		} else {
+			if hostIP := net.ParseIP(host); hostIP != nil {
+				options.ListenAddrs = append(options.ListenAddrs, host)
+			} else {
+				options.ListenAddrs = append(options.ListenAddrs, "0.0.0.0")
+			}
+			if portInt, err := strconv.Atoi(port); err == nil {
+				options.ListenPorts = append(options.ListenPorts, portInt)
+			} else {
+				cliErrorExit(c, err)
+			}
 		}
-		if c.Bool("udp") {
-			listenProtocols = append(listenProtocols, "udp")
+
+		options.EDNSAddr = c.String("edns")
+		options.Cache = c.BoolT("cache")
+		options.Verbose = c.BoolT("verbose")
+		options.Insecure = c.BoolT("insecure")
+		options.RefuseAny = c.BoolT("refuse-any")
+		options.IPv6Disabled = c.BoolT("ipv6-disabled")
+		options.FastestAddress = c.BoolT("fastest-addr")
+		if options.FastestAddress {
+			options.Cache = true
+			options.CacheMinTTL = 600
 		}
-		if 0 == len(listenProtocols) {
-			cli.ShowAppHelp(c)
-			os.Exit(0)
+
+		options.Upstreams = c.StringSlice("upstream")
+		options.Fallbacks = c.StringSlice("fallback")
+		options.BootstrapDNS = c.StringSlice("bootstrap")
+
+		specUpstreams := []string{}
+		specScanner := bufio.NewScanner(bytes.NewReader([]byte(specList)))
+		for specScanner.Scan() {
+			it := strings.TrimSpace(specScanner.Text())
+			if !regexp.MustCompile(`^[a-zA-Z0-9\.\_\-]+$`).MatchString(it) {
+				continue
+			}
+			specUpstreams = append(specUpstreams, fmt.Sprintf("[/%s/]", it))
+		}
+
+		for _, u := range c.StringSlice("special-upstream") {
+			for _, it := range specUpstreams {
+				options.Upstreams = append(options.Upstreams, it+u)
+			}
 		}
 
 		if !strings.HasPrefix(version, "MISSING") {
 			fmt.Fprintf(os.Stderr, "%s %s\n", strings.ToUpper(c.App.Name), c.App.Version)
 		}
 
-		upstreamOptions := upstream.Options{
-			Bootstrap:          c.StringSlice("bootstrap"),
-			Timeout:            3333 * time.Millisecond,
-			InsecureSkipVerify: c.Bool("insecure"),
-		}
-
-		handlerOptions := HandlerOptions{
-			blockANY:  c.Bool("refuse-any"),
-			blockAAAA: c.Bool("ipv6-disabled"),
-		}
-
-		var (
-			ou   = c.StringSlice("ou")
-			iu   = c.StringSlice("iu")
-			outs []upstream.Upstream
-			ins  []upstream.Upstream
-		)
-
-		for i := range ou {
-			if out, err := upstream.AddressToUpstream(ou[i], upstreamOptions); err == nil {
-				outs = append(outs, out)
-				glog.V(LINFO).Infof("parse outside-upstream: %s", ou[i])
-			} else {
-				glog.V(LWARNING).Infof("fail to parse outside-upstream %s", ou[i])
-				glog.V(LWARNING).Infoln(err)
-			}
-		}
-		if len(outs) > 0 {
-			hOptions := handlerOptions
-			edns := c.String("out-edns")
-			if ednsIP := net.ParseIP(edns); ednsIP != nil {
-				glog.V(LDEBUG).Infof("parsed out-EDNS: %s", edns)
-				hOptions.edns = &ednsIP
-			} else {
-				if len(edns) > 0 {
-					glog.V(LWARNING).Infof("cannot parse out-EDNS: %s", edns)
-				}
-			}
-			outHandler = NewHandler(outs, hOptions)
+		if options.Verbose {
+			dump, _ := yaml.Marshal(&options)
+			fmt.Println(string(dump))
 		} else {
-			glog.V(LDEBUG).Infoln("No Valid outside-upstrea")
-			os.Exit(0)
+			log.Printf("Speclist Length: %d", len(specUpstreams))
+			log.Printf("Upstream Rule Count: %d", len(options.Upstreams))
 		}
 
-		for i := range iu {
-			if in, err := upstream.AddressToUpstream(iu[i], upstreamOptions); err == nil {
-				ins = append(ins, in)
-				glog.V(LINFO).Infof("parse inside-upstream: %s", iu[i])
-			} else {
-				glog.V(LWARNING).Infof("fail to parse inside-upstream %s", iu[i])
-				glog.V(LWARNING).Infoln(err)
-			}
-		}
-		if len(ins) > 0 {
-			hOptions := handlerOptions
-			edns := c.String("in-edns")
-			if ednsIP := net.ParseIP(edns); ednsIP != nil {
-				glog.V(LDEBUG).Infof("parsed in-EDNS: %s", edns)
-				hOptions.edns = &ednsIP
-			} else {
-				if len(edns) > 0 {
-					glog.V(LWARNING).Infof("cannot parse in-EDNS: %s", edns)
-				}
-			}
-			inHandler = NewHandler(ins, hOptions)
-		} else {
-			glog.V(LDEBUG).Infoln("No Valid inside-upstrea")
-			os.Exit(0)
-		}
-
+		run(options)
 		return nil
 	}
-	app.Flags = append(app.Flags, glogGangstaFlags...)
 	app.Run(os.Args)
-	defer glog.Flush()
-
-	autoDNS := autodns.NewAutoDNS(inHandler.HandleFunc, outHandler.HandleFunc, "")
-	dns.HandleFunc(".", autoDNS.HandleFunc)
-
-	// start the servers
-	servers := make(chan bool)
-	for _, protocol := range listenProtocols {
-		go func(protocol string) {
-			serve(protocol, listenAddress)
-			servers <- true
-		}(protocol)
-	}
-
-	// wait for servers to exit
-	for range listenProtocols {
-		<-servers
-	}
-
-	glog.V(LINFO).Infoln("servers exited, stopping")
 }

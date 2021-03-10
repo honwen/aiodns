@@ -1,6 +1,6 @@
-package autodns
+package main
 
-var outsideList = `
+var specList = `
 blogspot.ad
 blogspot.ae
 blogspot.al

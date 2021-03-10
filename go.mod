@@ -1,10 +1,11 @@
 module github.com/honwen/aiodns
 
-go 1.15
+go 1.16
 
 require (
-	github.com/AdguardTeam/dnsproxy v0.35.4
-	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
-	github.com/miekg/dns v1.1.40
+	github.com/AdguardTeam/dnsproxy v0.35.5
+	github.com/AdguardTeam/golibs v0.4.4
+	github.com/ameshkov/dnscrypt/v2 v2.0.3
 	github.com/urfave/cli v1.22.5
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 )
