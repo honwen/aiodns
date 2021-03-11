@@ -4,14 +4,15 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
 
 	"github.com/AdguardTeam/golibs/log"
+	"github.com/asaskevich/govalidator"
 	"github.com/urfave/cli"
 	"gopkg.in/yaml.v3"
 )
@@ -45,8 +46,8 @@ func init() {
 	specUpstream.Set("https://cloudflare-dns.com/dns-query")
 
 	fallUpstream.Set("tls://dns.rubyfish.cn")
-	fallUpstream.Set("https://dns.rubyfish.cn/dns-query")
 	fallUpstream.Set("https://i.233py.com/dns-query")
+	fallUpstream.Set("https://dns.rubyfish.cn/dns-query")
 	bootUpstream.Set("tls://223.5.5.5")
 	bootUpstream.Set("tls://1.0.0.1")
 	bootUpstream.Set("114.114.115.115")
@@ -89,6 +90,10 @@ func main() {
 			Name:  "bootstrap, b",
 			Value: bootUpstream,
 			Usage: "Bootstrap DNS for DoH and DoT, can be specified multiple times",
+		},
+		cli.StringSliceFlag{
+			Name:  "special-list, L",
+			Usage: "List of domains  using special-upstream (can be specified multiple times)",
 		},
 		cli.StringFlag{
 			Name:  "edns, e",
@@ -147,24 +152,50 @@ func main() {
 			options.Cache = true
 			options.CacheMinTTL = 600
 		}
+		if options.Cache {
+			options.CacheSizeBytes = 4 * 1024 * 1024 // 4M
+		}
 
 		options.Upstreams = append(c.StringSlice("upstream"), initSpecUpstreams...)
 		options.Fallbacks = c.StringSlice("fallback")
 		options.BootstrapDNS = c.StringSlice("bootstrap")
 
-		specUpstreams := []string{}
-		specScanner := bufio.NewScanner(bytes.NewReader([]byte(specList)))
-		for specScanner.Scan() {
-			it := strings.TrimSpace(specScanner.Text())
-			if !regexp.MustCompile(`^[a-zA-Z0-9\.\_\-]+$`).MatchString(it) {
-				continue
+		specUpstreams := map[string]bool{}
+
+		specLists := []string{} // list[domains mulit-lines]
+		if len(c.StringSlice("special-list")) > 0 {
+			for _, it := range c.StringSlice("special-list") {
+				if dat, err := ioutil.ReadFile(it); err == nil {
+					specLists = append(specLists, string(dat))
+				}
 			}
-			specUpstreams = append(specUpstreams, fmt.Sprintf("[/%s/]", it))
+		} else {
+			log.Printf("Using build-in special list")
+			specLists = append(specLists, specList)
+			specLists = append(specLists, tldnList)
+		}
+		for _, v := range specLists {
+			specScanner := bufio.NewScanner(bytes.NewReader([]byte(v)))
+			for specScanner.Scan() {
+				it := strings.TrimSpace(specScanner.Text())
+				for strings.HasPrefix(it, ".") {
+					it = it[1:]
+				}
+				if len(it) <= 0 {
+					continue
+				}
+				specUpstreams[it] = true
+			}
 		}
 
 		for _, u := range c.StringSlice("special-upstream") {
-			for _, it := range specUpstreams {
-				options.Upstreams = append(options.Upstreams, it+u)
+			for it := range specUpstreams {
+				nUpstream := fmt.Sprintf("[/%s/]%s", it, u)
+				if !govalidator.IsDNSName(it) {
+					log.Printf("Speclist Rule Skiped: %s", nUpstream)
+					continue
+				}
+				options.Upstreams = append(options.Upstreams, nUpstream)
 			}
 		}
 
