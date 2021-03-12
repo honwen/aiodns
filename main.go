@@ -42,14 +42,17 @@ func init() {
 	// specUpstream.Set("tls://dns.adguard.com")
 	// specUpstream.Set("quic://dns.adguard.com")
 	specUpstream.Set("https://dns.google/dns-query")
-	specUpstream.Set("https://doh.dns.sb/dns-query")
+	specUpstream.Set("https://dns11.quad9.net/dns-query")
+	specUpstream.Set("https://doh.opendns.com/dns-query")
 	specUpstream.Set("https://cloudflare-dns.com/dns-query")
 
 	fallUpstream.Set("tls://dns.rubyfish.cn")
 	fallUpstream.Set("https://i.233py.com/dns-query")
 	fallUpstream.Set("https://dns.rubyfish.cn/dns-query")
+
 	bootUpstream.Set("tls://223.5.5.5")
 	bootUpstream.Set("tls://1.0.0.1")
+	bootUpstream.Set("tls://101.101.101.101")
 	bootUpstream.Set("114.114.115.115")
 }
 
@@ -84,7 +87,7 @@ func main() {
 		cli.StringSliceFlag{
 			Name:  "fallback, f",
 			Value: fallUpstream,
-			Usage: "Bootstrap DNS for DoH and DoT, can be specified multiple times",
+			Usage: "Fallback resolvers to use when regular ones are unavailable, can be specified multiple times",
 		},
 		cli.StringSliceFlag{
 			Name:  "bootstrap, b",
@@ -156,6 +159,9 @@ func main() {
 			options.CacheSizeBytes = 4 * 1024 * 1024 // 4M
 		}
 
+		if !strings.HasPrefix(version, "MISSING") {
+			fmt.Fprintf(os.Stderr, "%s %s\n", strings.ToUpper(c.App.Name), c.App.Version)
+		}
 		options.Upstreams = append(c.StringSlice("upstream"), initSpecUpstreams...)
 		options.Fallbacks = c.StringSlice("fallback")
 		options.BootstrapDNS = c.StringSlice("bootstrap")
@@ -197,10 +203,6 @@ func main() {
 				}
 				options.Upstreams = append(options.Upstreams, nUpstream)
 			}
-		}
-
-		if !strings.HasPrefix(version, "MISSING") {
-			fmt.Fprintf(os.Stderr, "%s %s\n", strings.ToUpper(c.App.Name), c.App.Version)
 		}
 
 		if options.Verbose {
