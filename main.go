@@ -186,6 +186,9 @@ func main() {
 				for strings.HasPrefix(it, ".") {
 					it = it[1:]
 				}
+				for strings.HasSuffix(it, ".") && len(it) > 0 {
+					it = it[:len(it)-1]
+				}
 				if len(it) <= 0 {
 					continue
 				}
