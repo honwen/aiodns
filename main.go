@@ -64,7 +64,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "AIO DNS"
 	app.Usage = "All In One Clean DNS Solution."
-	app.Version = fmt.Sprintf("Git:[%s] (%s)", strings.ToUpper(VersionString), runtime.Version())
+	app.Version = fmt.Sprintf("Git:[%s] (%s)", VersionString, runtime.Version())
 	// app.HideVersion = true
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -127,6 +127,10 @@ func main() {
 	}
 
 	app.Action = func(c *cli.Context) error {
+		if !strings.HasPrefix(VersionString, "undefined") {
+			fmt.Fprintf(os.Stderr, "%s %s\n", strings.ToUpper(c.App.Name), c.App.Version)
+		}
+
 		if host, port, err := net.SplitHostPort(c.String("listen")); err != nil {
 			cliErrorExit(c, err)
 		} else {
@@ -157,9 +161,6 @@ func main() {
 			options.CacheSizeBytes = 4 * 1024 * 1024 // 4M
 		}
 
-		if !strings.HasPrefix(VersionString, "undefined") {
-			fmt.Fprintf(os.Stderr, "%s %s\n", strings.ToUpper(c.App.Name), c.App.Version)
-		}
 		options.Upstreams = append(c.StringSlice("upstream"), initSpecUpstreams...)
 		options.Fallbacks = c.StringSlice("fallback")
 		options.BootstrapDNS = c.StringSlice("bootstrap")

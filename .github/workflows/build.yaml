@@ -18,7 +18,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: 1.16.x
+          go-version: 1.16.2
 
       - name: Prepare environment
         run: |-
@@ -34,7 +34,7 @@ jobs:
       # MacOS
       - run: GOOS=darwin GOARCH=amd64 VERSION=${RELEASE_VERSION} make release
 
-      # Linux X86
+      # Linux X86/AMD64
       - run: GOOS=linux GOARCH=386 VERSION=${RELEASE_VERSION} make release
       - run: GOOS=linux GOARCH=amd64 VERSION=${RELEASE_VERSION} make release
 
@@ -77,18 +77,3 @@ jobs:
           file: "build/aiodns-*.tar.gz;build/aiodns-*.zip"
           tags: true
           draft: false
-
-  notify:
-    needs:
-      - build
-    if:
-      ${{ always() &&
-        (
-          github.event_name == 'push' ||
-          github.event.pull_request.head.repo.full_name == github.repository
-        )
-      }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Conclusion
-        uses: technote-space/workflow-conclusion-action@v1
