@@ -170,8 +170,18 @@ func main() {
 		specLists := []string{} // list[domains mulit-lines]
 		if len(c.StringSlice("special-list")) > 0 {
 			for _, it := range c.StringSlice("special-list") {
-				if dat, err := ioutil.ReadFile(it); err == nil {
-					specLists = append(specLists, string(dat))
+				if strings.HasPrefix(it, "http://") || strings.HasPrefix(it, "https://") {
+					log.Printf("Fetching online special list: [%s]", it)
+					if dat, err := curl(it, options.BootstrapDNS); err == nil {
+						specLists = append(specLists, string(dat))
+						log.Printf("%d lines special list fetched", len(strings.Split(string(dat), "\n")))
+					} else {
+						log.Debug("Failed; Skipped!", it)
+					}
+				} else {
+					if dat, err := ioutil.ReadFile(it); err == nil {
+						specLists = append(specLists, string(dat))
+					}
 				}
 			}
 		} else {

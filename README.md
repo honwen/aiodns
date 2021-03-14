@@ -20,8 +20,8 @@ A All-In-One DNS Solution, A Specail-List Rule Generator of `AdguardTeam/dnsprox
 $ docker pull chenhw2/aiodns
 
 $ docker run -d \
-    -p "53:5300/udp" \
-    -p "53:5300/tcp" \
+    ---network=host \
+    -e PORT=53 \
     chenhw2/aiodns
 
 ```

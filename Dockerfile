@@ -18,9 +18,7 @@ COPY --from=builder /go/bin /usr/bin
 
 USER nobody
 
-ENV ARGS="-C -F -A -R -V"
+ENV PORT=5300 \
+    ARGS="-C -F -A -R -V -L=https://raw.sevencdn.com/honwen/openwrt-dnsmasq-extra/master/dnsmasq-extra/files/data/gfwlist -L=https://raw.sevencdn.com/honwen/openwrt-dnsmasq-extra/master/dnsmasq-extra/files/data/tldn -L=https://raw.sevencdn.com/Loyalsoldier/v2ray-rules-dat/release/greatfire.txt"
 
-EXPOSE 5300
-EXPOSE 5300/udp
-
-CMD aiodns ${ARGS}
+CMD aiodns -l=:${PORT} ${ARGS}
