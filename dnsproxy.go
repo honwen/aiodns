@@ -1,4 +1,4 @@
-// https://github.com/AdguardTeam/dnsproxy/blob/v0.35.5/main.go
+// https://github.com/AdguardTeam/dnsproxy/blob/v0.36.0/main.go
 
 package main
 

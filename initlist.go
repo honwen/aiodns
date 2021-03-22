@@ -741,6 +741,7 @@ blogcity.me
 ns1.name
 ns2.name
 ns3.name
+2047.name
 psblog.name
 kui.name
 changeip.name
@@ -2055,6 +2056,7 @@ creativelab5.com
 wdf5.com
 porn5.com
 gvt5.com
+2du5.com
 ieasy5.com
 post76.com
 blog.syx86.com
@@ -2361,6 +2363,7 @@ sugarsync.com
 getsync.com
 hkcoc.com
 toodoc.com
+www.hostloc.com
 hkepc.com
 4irc.com
 otcbtc.com
@@ -3501,6 +3504,7 @@ v2raycn.com
 netdna-cdn.com
 xvideos-cdn.com
 vox-cdn.com
+xnxx-cdn.com
 sndcdn.com
 myspacecdn.com
 icfcdn.com
@@ -4853,6 +4857,7 @@ cdw.com
 rmjdw.com
 1eew.com
 gerritcodereview.com
+appspot-preview.com
 bloombergview.com
 tumview.com
 maplew.com
@@ -5554,6 +5559,7 @@ ddns.ms
 gfx.ms
 sfx.ms
 89.64.charter.constitutionalism.solutions
+generated.photos
 gfw.press
 china5000.us
 sis001.us
@@ -5888,6 +5894,7 @@ fbcdn.net
 twitchcdn.net
 dmcdn.net
 kakaocdn.net
+secureservercdn.net
 line-scdn.net
 edgecastcdn.net
 2mdn.net
@@ -6036,6 +6043,7 @@ steganos.net
 galstars.net
 pokerstars.net
 creaders.net
+webpass.net
 islamawareness.net
 tibetexpress.net
 wizcrafts.net
