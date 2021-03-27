@@ -14,7 +14,7 @@ var (
 	tcpTimeout = 30 * time.Second
 )
 
-func curl(url string, resolvers []string) (data []byte, err error) {
+func curl(url string, resolvers []string, retry int) (data []byte, err error) {
 	client := &http.Client{
 		Transport: &http.Transport{
 			ResponseHeaderTimeout: tcpTimeout,
@@ -54,7 +54,11 @@ func curl(url string, resolvers []string) (data []byte, err error) {
 
 	request, _ := http.NewRequest("GET", url, nil)
 	if resp, err := client.Do(request); err != nil {
-		return nil, err
+		if retry <= 0 {
+			return nil, err
+		} else {
+			return curl(url, resolvers, retry-1)
+		}
 	} else {
 		data, err = ioutil.ReadAll(resp.Body)
 		resp.Body.Close()

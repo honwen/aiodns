@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -170,25 +171,51 @@ func main() {
 		specLists := []string{} // list[domains mulit-lines]
 		if len(c.StringSlice("special-list")) > 0 {
 			for _, it := range c.StringSlice("special-list") {
+				var dat []byte
+				var err error
+
+				// Fetch List (Online or Local)
 				if strings.HasPrefix(it, "http://") || strings.HasPrefix(it, "https://") {
 					log.Printf("Fetching online special list: [%s]", it)
-					if dat, err := curl(it, options.BootstrapDNS); err == nil {
-						specLists = append(specLists, string(dat))
-						log.Printf("%d lines special list fetched", len(strings.Split(string(dat), "\n")))
-					} else {
-						log.Debug("Failed; Skipped!", it)
-					}
+					dat, err = curl(it, options.BootstrapDNS, 5)
 				} else {
-					if dat, err := ioutil.ReadFile(it); err == nil {
-						specLists = append(specLists, string(dat))
+					if strings.HasPrefix(it, "~") {
+						homedir, _ := os.UserHomeDir()
+						it = homedir + it[1:]
+					}
+					log.Printf("Fetching local special list: [%s]", it)
+					dat, err = ioutil.ReadFile(it)
+				}
+
+				// gunzip if needed
+				if strings.HasSuffix(it, ".gz") {
+					if zReader, zErr := gzip.NewReader(bytes.NewReader(dat)); zErr == nil {
+						dat, _ = ioutil.ReadAll(zReader)
+					} else {
+						err = zErr
 					}
 				}
+
+				// skip if error
+				if err != nil {
+					log.Println(err)
+					log.Printf("Failed; Skipped! [%s]", it)
+					continue
+				}
+
+				// append special-list
+				specLists = append(specLists, string(dat))
+				log.Printf("%d lines special list fetched", len(strings.Split(string(dat), "\n")))
 			}
-		} else {
+		}
+
+		// FailSafe or Default
+		if len(specLists) <= 0 {
 			log.Printf("Using build-in special list")
 			specLists = append(specLists, specList)
 			specLists = append(specLists, tldnList)
 		}
+
 		for _, v := range specLists {
 			specScanner := bufio.NewScanner(bytes.NewReader([]byte(v)))
 			for specScanner.Scan() {
