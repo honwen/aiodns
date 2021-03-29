@@ -14,6 +14,7 @@ import (
 
 	"github.com/AdguardTeam/golibs/log"
 	"github.com/asaskevich/govalidator"
+	"github.com/emirpasic/gods/sets/hashset"
 	"github.com/urfave/cli"
 	"gopkg.in/yaml.v3"
 )
@@ -165,7 +166,7 @@ func main() {
 		options.Fallbacks = c.StringSlice("fallback")
 		options.BootstrapDNS = c.StringSlice("bootstrap")
 
-		specUpstreams := map[string]bool{}
+		specUpstreams := hashset.New()
 
 		specLists := []string{} // list[domains mulit-lines]
 		if len(c.StringSlice("special-list")) > 0 {
@@ -225,17 +226,17 @@ func main() {
 				for strings.HasSuffix(it, ".") && len(it) > 0 {
 					it = it[:len(it)-1]
 				}
-				if len(it) <= 0 {
+				if len(it) <= 0 || initSpecDomains.Contains(it) {
 					continue
 				}
-				specUpstreams[it] = true
+				specUpstreams.Add(it)
 			}
 		}
 
 		for _, u := range c.StringSlice("special-upstream") {
-			for it := range specUpstreams {
+			for _, it := range specUpstreams.Values() {
 				nUpstream := fmt.Sprintf("[/%s/]%s", it, u)
-				if !govalidator.IsDNSName(it) {
+				if !govalidator.IsDNSName(it.(string)) {
 					log.Printf("Speclist Rule Skiped: %s", nUpstream)
 					continue
 				}
@@ -243,11 +244,17 @@ func main() {
 			}
 		}
 
+		for _, u := range initSpecUpstreams {
+			for _, it := range initSpecDomains.Values() {
+				options.Upstreams = append(options.Upstreams, fmt.Sprintf("[/%s/]%s", it, u))
+			}
+		}
+
 		if options.Verbose {
 			dump, _ := yaml.Marshal(&options)
 			fmt.Println(string(dump))
 		} else {
-			log.Printf("Speclist Length: %d", len(specUpstreams))
+			log.Printf("Speclist Length: %d", specUpstreams.Size())
 			log.Printf("Upstream Rule Count: %d", len(options.Upstreams))
 		}
 

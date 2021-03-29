@@ -45,9 +45,9 @@ COMMANDS:
 GLOBAL OPTIONS:
    --listen value, -l value            Listening address (default: ":5300")
    --upstream value, -u value          An upstream to be default used (can be specified multiple times) (default: "tls://dns.pub", "tls://223.6.6.6", "https://doh.pub/dns-query", "https://dns.alidns.com/dns-query")
-   --special-upstream value, -U value  An upstream to be special used (can be specified multiple times) (default: "tls://dns.google", "tls://162.159.36.1", "https://dns.google/dns-query", "https://doh.dns.sb/dns-query", "https://cloudflare-dns.com/dns-query")
-   --fallback value, -f value          Bootstrap DNS for DoH and DoT, can be specified multiple times (default: "tls://dns.rubyfish.cn", "https://i.233py.com/dns-query", "https://dns.rubyfish.cn/dns-query")
-   --bootstrap value, -b value         Bootstrap DNS for DoH and DoT, can be specified multiple times (default: "tls://223.5.5.5", "tls://1.0.0.1", "114.114.115.115")
+   --special-upstream value, -U value  An upstream to be special used (can be specified multiple times) (default: "tls://8.8.8.8", "tls://162.159.36.1", "https://dns.google/dns-query", "https://dns11.quad9.net/dns-query", "https://doh.opendns.com/dns-query", "https://cloudflare-dns.com/dns-query")
+   --fallback value, -f value          Fallback resolvers to use when regular ones are unavailable, can be specified multiple times (default: "tls://d.rubyfish.cn", "https://i.233py.com/dns-query")
+   --bootstrap value, -b value         Bootstrap DNS for DoH and DoT, can be specified multiple times (default: "tls://223.5.5.5", "tls://1.0.0.1", "tls://101.101.101.101", "114.114.115.115")
    --special-list value, -L value      List of domains  using special-upstream (can be specified multiple times)
    --edns value, -e value              Send EDNS Client Address to default upstreams
    --cache, -C                         If specified, DNS cache is enabled
