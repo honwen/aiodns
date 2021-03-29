@@ -36,7 +36,7 @@ func init() {
 	defaultUpstream.Set("https://doh.pub/dns-query")
 	defaultUpstream.Set("https://dns.alidns.com/dns-query")
 
-	specUpstream.Set("tls://dns.google")
+	specUpstream.Set("tls://8.8.8.8")
 	specUpstream.Set("tls://162.159.36.1")
 	// specUpstream.Set("tls://dns.adguard.com")
 	// specUpstream.Set("quic://dns.adguard.com")
@@ -45,9 +45,8 @@ func init() {
 	specUpstream.Set("https://doh.opendns.com/dns-query")
 	specUpstream.Set("https://cloudflare-dns.com/dns-query")
 
-	fallUpstream.Set("tls://dns.rubyfish.cn")
+	fallUpstream.Set("tls://d.rubyfish.cn")
 	fallUpstream.Set("https://i.233py.com/dns-query")
-	fallUpstream.Set("https://dns.rubyfish.cn/dns-query")
 
 	bootUpstream.Set("tls://223.5.5.5")
 	bootUpstream.Set("tls://1.0.0.1")

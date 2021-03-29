@@ -4,9 +4,26 @@ var initSpecUpstreams = []string{
 	"[/dl.google.com/]tls://101.101.101.101",
 	"[/dl.google.com/]tls://dns.adguard.com",
 	"[/dl.google.com/]https://doh.dns.sb/dns-query",
+	"[/dl.google.com/]https://dns.twnic.tw/dns-query",
+	"[/dl.google.com/]https://doh.opendns.com/dns-query",
+
 	"[/googleapis.cn/]tls://101.101.101.101",
 	"[/googleapis.cn/]tls://dns.adguard.com",
 	"[/googleapis.cn/]https://doh.dns.sb/dns-query",
+	"[/googleapis.cn/]https://dns.twnic.tw/dns-query",
+	"[/googleapis.cn/]https://doh.opendns.com/dns-query",
+
+	"[/googleapis.com/]tls://101.101.101.101",
+	"[/googleapis.com/]tls://dns.adguard.com",
+	"[/googleapis.com/]https://doh.dns.sb/dns-query",
+	"[/googleapis.com/]https://dns.twnic.tw/dns-query",
+	"[/googleapis.com/]https://doh.opendns.com/dns-query",
+
+	"[/gstatic.com/]tls://101.101.101.101",
+	"[/gstatic.com/]tls://dns.adguard.com",
+	"[/gstatic.com/]https://doh.dns.sb/dns-query",
+	"[/gstatic.com/]https://dns.twnic.tw/dns-query",
+	"[/gstatic.com/]https://doh.opendns.com/dns-query",
 }
 
 const specList = `
