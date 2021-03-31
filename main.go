@@ -162,7 +162,7 @@ func main() {
 			options.CacheSizeBytes = 4 * 1024 * 1024 // 4M
 		}
 
-		options.Upstreams = append(c.StringSlice("upstream"), initSpecUpstreams...)
+		options.Upstreams = c.StringSlice("upstream")
 		options.Fallbacks = c.StringSlice("fallback")
 		options.BootstrapDNS = c.StringSlice("bootstrap")
 
