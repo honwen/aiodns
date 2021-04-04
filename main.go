@@ -23,6 +23,7 @@ var (
 	options = Options{
 		AllServers:       true,
 		EnableEDNSSubnet: true,
+		TLSMinVersion:    1.2,
 	}
 
 	defaultUpstream = new(cli.StringSlice)
