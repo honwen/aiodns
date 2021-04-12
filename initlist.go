@@ -573,6 +573,7 @@ zind.cloud
 renzhe.cloud
 unirule.cloud
 mastodon.cloud
+edia.prod.mdn.mozit.cloud
 ilove80.be
 maruta.be
 fnac.be
@@ -745,6 +746,7 @@ searx.me
 binux.me
 a.91gay.me
 sogrady.me
+hdsky.me
 blogcity.me
 ns1.name
 ns2.name
@@ -860,6 +862,7 @@ chinarightsia.org
 tbsmalaysia.org
 drmingxia.org
 norbulingka.org
+eveloper.mozilla.org
 angola.org
 hola.org
 schema.org
@@ -1447,6 +1450,7 @@ karmapa-teachings.org
 dragonsprings.org
 xysblogs.org
 freekazakhs.org
+hinapower.csis.org
 bjs.org
 angularjs.org
 wikileaks.org
@@ -1470,6 +1474,7 @@ dyndns.org
 chinaelections.org
 mergersandinquisitions.org
 etowns.org
+dn.mozillademos.org
 ibros.org
 sos.org
 sitemaps.org
@@ -1550,6 +1555,7 @@ flnet.org
 internet.org
 zhengwunet.org
 old.honeynet.org
+celestiallight.org
 pureinsight.org
 msa-it.org
 twiggit.org
@@ -2126,6 +2132,7 @@ yibada.com
 vpndada.com
 mingpaocanada.com
 anaconda.com
+tm.tnt-ea.com
 imageflea.com
 hrtsea.com
 porntea.com
@@ -2610,6 +2617,7 @@ tunsafe.com
 forum.palmislife.com
 daylife.com
 duckmylife.com
+isco.evergage.com
 shipcamouflage.com
 nordstromimage.com
 greatfire.us7.list-manage.com
@@ -2826,6 +2834,7 @@ nzchinese.com
 ozchinese.com
 voacantonese.com
 chromercise.com
+pstore.corpmerchandise.com
 vip-enterprise.com
 in-disguise.com
 bitvise.com
@@ -2834,6 +2843,7 @@ adsense.com
 thecleversense.com
 parse.com
 sl-reverse.com
+dn77.scoreuniverse.com
 twitcause.com
 joinclubhouse.com
 islamhouse.com
@@ -3121,6 +3131,7 @@ mubi.com
 dessci.com
 tuzaijidi.com
 vivaldi.com
+mperial.insendi.com
 dalailamahindi.com
 huhangfei.com
 ranyunfei.com
@@ -3255,6 +3266,7 @@ omnitalk.com
 paltalk.com
 xlfmtalk.com
 realraptalk.com
+urofensk-prod-env.eu-west-1.elasticbeanstalk.com
 tagwalk.com
 ebtcbank.com
 retweetrank.com
@@ -3298,6 +3310,7 @@ kannewyork.com
 plurk.com
 twitturk.com
 wowrk.com
+andom.zendesk.com
 coindesk.com
 eksisozluk.com
 zsdxzk.com
@@ -4208,6 +4221,7 @@ sellclassics.com
 cnnpolitics.com
 cloudrobotics.com
 googleanalytics.com
+oss-cn-hongkong.aliyuncs.com
 tweetcs.com
 goodreads.com
 youtubekids.com
@@ -4511,6 +4525,7 @@ hkcnews.com
 usunitednews.com
 thestandnews.com
 porntubenews.com
+efreenews.com
 latelinenews.com
 freemorenews.com
 thehousenews.com
@@ -4614,6 +4629,9 @@ helpshift.com
 hklft.com
 bandisoft.com
 efksoft.com
+zuremarketplace.microsoft.com
+zure.microsoft.com
+eveloper.microsoft.com
 vmpsoft.com
 eriversoft.com
 googleweblight.com
@@ -4727,6 +4745,7 @@ atlaspost.com
 thetibetpost.com
 firstpost.com
 nypost.com
+stripst.com
 yourlust.com
 usertrust.com
 att.com
@@ -5540,6 +5559,7 @@ coinrail.co.kr
 ytn.co.kr
 kakao.co.kr
 epochtimes.co.kr
+lizzard.nefficient.co.kr
 pinterest.co.kr
 ntdtv.co.kr
 minghui.or.kr
@@ -5561,6 +5581,7 @@ archive.is
 unseen.is
 workflow.is
 pincong.rocks
+mohu.rocks
 ssr.tools
 nyti.ms
 ddns.ms
@@ -5660,6 +5681,7 @@ witopia.net
 vpninja.net
 ihakka.net
 imagezilla.net
+nteractive-examples.mdn.mozilla.net
 dupola.net
 photodharma.net
 danke4china.net
@@ -5683,7 +5705,7 @@ javhub.net
 hdtvb.net
 hkbc.net
 85cc.net
-disneyplus.com.ssl.sc.omtrdc.net
+omtrdc.net
 dnssec.net
 blog.pentalogic.net
 fuckcnnic.net
@@ -5985,6 +6007,7 @@ delcamp.net
 ulop.net
 bumptop.net
 discordapp.net
+cloudapp.net
 whatsapp.net
 hockeyapp.net
 letscorp.net
@@ -6038,6 +6061,7 @@ perfectgirls.net
 jims.net
 dynamic-dns.net
 apple-dns.net
+akadns.net
 ddns.net
 authorizeddns.net
 incapdns.net
@@ -6138,6 +6162,7 @@ feedx.net
 demdex.net
 kphimsex.net
 sexinsex.net
+rightcove.imgix.net
 netflix.net
 himemix.net
 packetix.net

@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/AdguardTeam/golibs/log"
-	"github.com/asaskevich/govalidator"
+	"github.com/AdguardTeam/golibs/utils"
 	"github.com/emirpasic/gods/sets/hashset"
 	"github.com/urfave/cli"
 	"gopkg.in/yaml.v3"
@@ -237,7 +237,7 @@ func main() {
 		for _, u := range c.StringSlice("special-upstream") {
 			for _, it := range specUpstreams.Values() {
 				nUpstream := fmt.Sprintf("[/%s/]%s", it, u)
-				if !govalidator.IsDNSName(it.(string)) {
+				if utils.IsValidHostname(it.(string)+`.`) == nil {
 					log.Printf("Speclist Rule Skiped: %s", nUpstream)
 					continue
 				}
