@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -62,6 +63,60 @@ func cliErrorExit(c *cli.Context, err error) {
 	os.Exit(-1)
 }
 
+func fetch(uri string, resolvers []string) (dat []byte, err error) {
+	// Fetch List (Online or Local)
+	if strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") {
+		log.Printf("Fetching online list: [%s]", uri)
+		dat, err = curl(uri, resolvers, 5)
+	} else {
+		if strings.HasPrefix(uri, "~") {
+			homedir, _ := os.UserHomeDir()
+			uri = homedir + uri[1:]
+		}
+		log.Printf("Fetching local list: [%s]", uri)
+		dat, err = ioutil.ReadFile(uri)
+	}
+
+	// gunzip if needed
+	if strings.HasSuffix(uri, ".gz") {
+		if zReader, zErr := gzip.NewReader(bytes.NewReader(dat)); zErr == nil {
+			dat, _ = ioutil.ReadAll(zReader)
+		} else {
+			err = zErr
+		}
+	}
+	return
+}
+
+func scanDoamins(dat []byte, filter *hashset.Set) (domains *hashset.Set) {
+	domains = hashset.New()
+	scanner := bufio.NewScanner(bytes.NewReader(dat))
+	for scanner.Scan() {
+		it := strings.TrimSpace(scanner.Text())
+		for strings.HasPrefix(it, "#") {
+			continue
+		}
+		for strings.HasPrefix(it, ".") {
+			it = it[1:]
+		}
+		for strings.HasSuffix(it, ".") && len(it) > 0 {
+			it = it[:len(it)-1]
+		}
+		if match, _ := regexp.MatchString(`^(server|ipset)=/[^\/]*/`, it); match {
+			it = it[8:strings.LastIndex(it, `/`)]
+		}
+		if len(it) <= 0 || (filter != nil && filter.Contains(it)) {
+			continue
+		}
+		if utils.IsValidHostname(it+`.`) == nil {
+			fmt.Printf("Domain Skiped: %s\n", it)
+			continue
+		}
+		domains.Add(it)
+	}
+	return
+}
+
 func main() {
 	app := cli.NewApp()
 	app.Name = "AIO DNS"
@@ -96,7 +151,11 @@ func main() {
 		},
 		cli.StringSliceFlag{
 			Name:  "special-list, L",
-			Usage: "List of domains  using special-upstream (can be specified multiple times)",
+			Usage: "List of domains using special-upstream (can be specified multiple times)",
+		},
+		cli.StringSliceFlag{
+			Name:  "bypass-list, B",
+			Usage: "List of domains bypass special-upstream (can be specified multiple times)",
 		},
 		cli.StringFlag{
 			Name:  "edns, e",
@@ -167,35 +226,12 @@ func main() {
 		options.Fallbacks = c.StringSlice("fallback")
 		options.BootstrapDNS = c.StringSlice("bootstrap")
 
-		specUpstreams := hashset.New()
+		specDomains := hashset.New()
 
 		specLists := []string{} // list[domains mulit-lines]
 		if len(c.StringSlice("special-list")) > 0 {
 			for _, it := range c.StringSlice("special-list") {
-				var dat []byte
-				var err error
-
-				// Fetch List (Online or Local)
-				if strings.HasPrefix(it, "http://") || strings.HasPrefix(it, "https://") {
-					log.Printf("Fetching online special list: [%s]", it)
-					dat, err = curl(it, options.BootstrapDNS, 5)
-				} else {
-					if strings.HasPrefix(it, "~") {
-						homedir, _ := os.UserHomeDir()
-						it = homedir + it[1:]
-					}
-					log.Printf("Fetching local special list: [%s]", it)
-					dat, err = ioutil.ReadFile(it)
-				}
-
-				// gunzip if needed
-				if strings.HasSuffix(it, ".gz") {
-					if zReader, zErr := gzip.NewReader(bytes.NewReader(dat)); zErr == nil {
-						dat, _ = ioutil.ReadAll(zReader)
-					} else {
-						err = zErr
-					}
-				}
+				dat, err := fetch(it, options.BootstrapDNS)
 
 				// skip if error
 				if err != nil {
@@ -218,31 +254,47 @@ func main() {
 		}
 
 		for _, v := range specLists {
-			specScanner := bufio.NewScanner(bytes.NewReader([]byte(v)))
-			for specScanner.Scan() {
-				it := strings.TrimSpace(specScanner.Text())
-				for strings.HasPrefix(it, ".") {
-					it = it[1:]
-				}
-				for strings.HasSuffix(it, ".") && len(it) > 0 {
-					it = it[:len(it)-1]
-				}
-				if len(it) <= 0 || initSpecDomains.Contains(it) {
-					continue
-				}
-				specUpstreams.Add(it)
-			}
+			specDomains.Add(scanDoamins([]byte(v), specDomains).Values()...)
 		}
 
 		for _, u := range c.StringSlice("special-upstream") {
-			for _, it := range specUpstreams.Values() {
+			for _, it := range specDomains.Values() {
 				nUpstream := fmt.Sprintf("[/%s/]%s", it, u)
-				if utils.IsValidHostname(it.(string)+`.`) == nil {
-					log.Printf("Speclist Rule Skiped: %s", nUpstream)
-					continue
-				}
 				options.Upstreams = append(options.Upstreams, nUpstream)
 			}
+		}
+
+		if len(c.StringSlice("bypass-list")) > 0 {
+			bypassDomains := hashset.New()
+			for _, it := range c.StringSlice("bypass-list") {
+				dat, err := fetch(it, options.BootstrapDNS)
+
+				// skip if error
+				if err != nil {
+					log.Println(err)
+					log.Printf("Failed; Skipped! [%s]", it)
+					continue
+				}
+
+				// append bypass-list
+				bypassDomains.Add(scanDoamins(dat, nil).Values()...)
+			}
+			cnt := 0
+			for _, it := range bypassDomains.Values() {
+				needBypass := false
+				for _, spec := range specDomains.Values() {
+					if strings.HasSuffix(it.(string), `.`+spec.(string)) {
+						needBypass = true
+						break
+					}
+				}
+				if needBypass {
+					nUpstream := fmt.Sprintf("[/%s/]#", it)
+					options.Upstreams = append(options.Upstreams, nUpstream)
+					cnt++
+				}
+			}
+			log.Printf("%d bypass rules configured, totally", cnt)
 		}
 
 		for _, u := range initSpecUpstreams {
@@ -255,7 +307,7 @@ func main() {
 			dump, _ := yaml.Marshal(&options)
 			fmt.Println(string(dump))
 		} else {
-			log.Printf("Speclist Length: %d", specUpstreams.Size())
+			log.Printf("Speclist Length: %d", specDomains.Size())
 			log.Printf("Upstream Rule Count: %d", len(options.Upstreams))
 		}
 
