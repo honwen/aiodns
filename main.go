@@ -88,7 +88,9 @@ func fetch(uri string, resolvers []string) (dat []byte, err error) {
 	return
 }
 
-func scanDoamins(dat []byte, filter *hashset.Set) (domains *hashset.Set) {
+type scanFilter func(string) bool
+
+func scanDoamins(dat []byte, filter scanFilter) (domains *hashset.Set) {
 	domains = hashset.New()
 	scanner := bufio.NewScanner(bytes.NewReader(dat))
 	for scanner.Scan() {
@@ -105,7 +107,7 @@ func scanDoamins(dat []byte, filter *hashset.Set) (domains *hashset.Set) {
 		if match, _ := regexp.MatchString(`^(server|ipset)=/[^\/]*/`, it); match {
 			it = it[8:strings.LastIndex(it, `/`)]
 		}
-		if len(it) <= 0 || (filter != nil && filter.Contains(it)) {
+		if len(it) <= 0 || (filter != nil && filter(it)) {
 			continue
 		}
 		if utils.IsValidHostname(it+`.`) == nil {
@@ -226,8 +228,6 @@ func main() {
 		options.Fallbacks = c.StringSlice("fallback")
 		options.BootstrapDNS = c.StringSlice("bootstrap")
 
-		specDomains := hashset.New()
-
 		specLists := []string{} // list[domains mulit-lines]
 		if len(c.StringSlice("special-list")) > 0 {
 			for _, it := range c.StringSlice("special-list") {
@@ -253,9 +253,7 @@ func main() {
 			specLists = append(specLists, tldnList)
 		}
 
-		for _, v := range specLists {
-			specDomains.Add(scanDoamins([]byte(v), specDomains).Values()...)
-		}
+		specDomains := scanDoamins([]byte(strings.Join(specLists, "\n")), nil)
 
 		for _, u := range c.StringSlice("special-upstream") {
 			for _, it := range specDomains.Values() {
@@ -264,8 +262,8 @@ func main() {
 			}
 		}
 
+		bypassDomains := hashset.New()
 		if len(c.StringSlice("bypass-list")) > 0 {
-			bypassDomains := hashset.New()
 			for _, it := range c.StringSlice("bypass-list") {
 				dat, err := fetch(it, options.BootstrapDNS)
 
@@ -277,24 +275,29 @@ func main() {
 				}
 
 				// append bypass-list
-				bypassDomains.Add(scanDoamins(dat, nil).Values()...)
+				bypassDomains.Add(scanDoamins(dat,
+					func(s string) bool {
+						for _, spec := range specDomains.Values() {
+							if strings.HasSuffix(s, `.`+spec.(string)) {
+								return false
+							}
+						}
+						return true
+					}).Values()...)
 			}
-			cnt := 0
-			for _, it := range bypassDomains.Values() {
-				needBypass := false
-				for _, spec := range specDomains.Values() {
-					if strings.HasSuffix(it.(string), `.`+spec.(string)) {
-						needBypass = true
-						break
-					}
-				}
-				if needBypass {
-					nUpstream := fmt.Sprintf("[/%s/]#", it)
-					options.Upstreams = append(options.Upstreams, nUpstream)
-					cnt++
-				}
-			}
-			log.Printf("%d bypass rules configured, totally", cnt)
+		} else if len(c.StringSlice("special-list")) < 1 {
+			// only use build-in bypassList if special-list NOT configured
+			bypassDomains = scanDoamins([]byte(bypassList), nil)
+		}
+
+		for _, it := range bypassDomains.Values() {
+			nUpstream := fmt.Sprintf("[/%s/]%s", it, `#`)
+			options.Upstreams = append(options.Upstreams, nUpstream)
+		}
+
+		if len(c.StringSlice("bypass-list")) > 0 {
+			// only print log if bypass-list configured
+			log.Printf("%d bypass rules configured, totally", bypassDomains.Size())
 		}
 
 		for _, u := range initSpecUpstreams {
