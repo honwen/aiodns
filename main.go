@@ -275,9 +275,10 @@ func main() {
 				}
 
 				// append bypass-list
+				tldnFilter := scanDoamins([]byte(tldnList), nil)
 				bypassDomains.Add(scanDoamins(dat,
 					func(s string) bool {
-						for _, spec := range specDomains.Values() {
+						for _, spec := range tldnFilter.Values() {
 							if strings.HasSuffix(s, `.`+spec.(string)) {
 								return false
 							}
