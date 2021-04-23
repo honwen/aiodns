@@ -48,6 +48,7 @@ func init() {
 	specUpstream.Set("https://doh.opendns.com/dns-query")
 	specUpstream.Set("https://cloudflare-dns.com/dns-query")
 
+	fallUpstream.Set("tls://rubyfish.cn")
 	fallUpstream.Set("tls://d.rubyfish.cn")
 	fallUpstream.Set("https://i.233py.com/dns-query")
 
@@ -275,19 +276,12 @@ func main() {
 				}
 
 				// append bypass-list
-				tldnFilter := scanDoamins([]byte(tldnList), nil)
-				bypassDomains.Add(scanDoamins(dat,
-					func(s string) bool {
-						for _, spec := range tldnFilter.Values() {
-							if strings.HasSuffix(s, `.`+spec.(string)) {
-								return false
-							}
-						}
-						return true
-					}).Values()...)
+				bypassDomains.Add(scanDoamins(dat, nil).Values()...)
+				log.Printf("%d lines bypass list fetched", len(strings.Split(string(dat), "\n")))
 			}
 		} else if len(c.StringSlice("special-list")) < 1 {
 			// only use build-in bypassList if special-list NOT configured
+			log.Printf("Using build-in bypass list")
 			bypassDomains = scanDoamins([]byte(bypassList), nil)
 		}
 
@@ -312,6 +306,7 @@ func main() {
 			fmt.Println(string(dump))
 		} else {
 			log.Printf("Speclist Length: %d", specDomains.Size())
+			log.Printf("Bypasslist Length: %d", bypassDomains.Size())
 			log.Printf("Upstream Rule Count: %d", len(options.Upstreams))
 		}
 
