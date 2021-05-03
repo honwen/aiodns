@@ -1,8 +1,8 @@
 package main
 
-import "github.com/emirpasic/gods/sets/hashset"
+import "github.com/Workiva/go-datastructures/set"
 
-var initSpecDomains = hashset.New(
+var initSpecDomains = set.New(
 	"dl.google.com",
 	"googleapis.cn",
 	"googleapis.com",
@@ -14,6 +14,7 @@ var initSpecUpstreams = []string{
 	"tls://dns.adguard.com",
 	"https://doh.dns.sb/dns-query",
 	"https://dns.twnic.tw/dns-query",
+	"https://dns.adguard.com/dns-query",
 	"https://doh.opendns.com/dns-query",
 }
 
@@ -5279,6 +5280,7 @@ daodu14.jigsy.com
 specxinzl.jigsy.com
 wlcnew.jigsy.com
 topsy.com
+etsy.com
 jdwsy.com
 tibetsociety.com
 wenxuecity.com
@@ -5620,6 +5622,7 @@ mvg.jp
 kawaiikawaii.jp
 wikiwiki.jp
 ritouki.jp
+mixi.jp
 immoral.jp
 gosetsuden.jp
 happyon.jp

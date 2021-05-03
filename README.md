@@ -23,7 +23,6 @@ $ docker run -d \
     ---network=host \
     -e PORT=53 \
     chenhw2/aiodns
-
 ```
 
 ### Help

@@ -19,6 +19,6 @@ COPY --from=builder /go/bin /usr/bin
 USER nobody
 
 ENV PORT=5300 \
-    ARGS="-C -F -A -R -V -L=https://raw.sevencdn.com/honwen/openwrt-dnsmasq-extra/master/dnsmasq-extra/files/data/gfwlist -L=https://raw.sevencdn.com/honwen/openwrt-dnsmasq-extra/master/dnsmasq-extra/files/data/tldn -L=https://raw.sevencdn.com/Loyalsoldier/v2ray-rules-dat/release/greatfire.txt"
+    ARGS="-C -F -A -R -V -L=https://raw.githubusercontents.com/honwen/openwrt-dnsmasq-extra/master/dnsmasq-extra/files/data/gfwlist -L=https://raw.githubusercontents.com/honwen/openwrt-dnsmasq-extra/master/dnsmasq-extra/files/data/tldn -L=https://raw.githubusercontents.com/Loyalsoldier/v2ray-rules-dat/release/greatfire.txt"
 
 CMD aiodns -l=:${PORT} ${ARGS}

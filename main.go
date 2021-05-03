@@ -15,7 +15,7 @@ import (
 
 	"github.com/AdguardTeam/golibs/log"
 	"github.com/AdguardTeam/golibs/utils"
-	"github.com/emirpasic/gods/sets/hashset"
+	"github.com/Workiva/go-datastructures/set"
 	"github.com/urfave/cli"
 	"gopkg.in/yaml.v3"
 )
@@ -91,8 +91,8 @@ func fetch(uri string, resolvers []string) (dat []byte, err error) {
 
 type scanFilter func(string) bool
 
-func scanDoamins(dat []byte, filter scanFilter) (domains *hashset.Set) {
-	domains = hashset.New()
+func scanDoamins(dat []byte, filter scanFilter) (domains *set.Set) {
+	domains = set.New()
 	scanner := bufio.NewScanner(bytes.NewReader(dat))
 	for scanner.Scan() {
 		it := strings.TrimSpace(scanner.Text())
@@ -111,7 +111,7 @@ func scanDoamins(dat []byte, filter scanFilter) (domains *hashset.Set) {
 		if len(it) <= 0 || (filter != nil && filter(it)) {
 			continue
 		}
-		if utils.IsValidHostname(it+`.`) == nil {
+		if utils.IsValidHostname(it) != nil {
 			fmt.Printf("Domain Skiped: %s\n", it)
 			continue
 		}
@@ -257,13 +257,13 @@ func main() {
 		specDomains := scanDoamins([]byte(strings.Join(specLists, "\n")), nil)
 
 		for _, u := range c.StringSlice("special-upstream") {
-			for _, it := range specDomains.Values() {
+			for _, it := range specDomains.Flatten() {
 				nUpstream := fmt.Sprintf("[/%s/]%s", it, u)
 				options.Upstreams = append(options.Upstreams, nUpstream)
 			}
 		}
 
-		bypassDomains := hashset.New()
+		bypassDomains := set.New()
 		if len(c.StringSlice("bypass-list")) > 0 {
 			for _, it := range c.StringSlice("bypass-list") {
 				dat, err := fetch(it, options.BootstrapDNS)
@@ -276,7 +276,7 @@ func main() {
 				}
 
 				// append bypass-list
-				bypassDomains.Add(scanDoamins(dat, nil).Values()...)
+				bypassDomains.Add(scanDoamins(dat, nil).Flatten()...)
 				log.Printf("%d lines bypass list fetched", len(strings.Split(string(dat), "\n")))
 			}
 		} else if len(c.StringSlice("special-list")) < 1 {
@@ -285,18 +285,18 @@ func main() {
 			bypassDomains = scanDoamins([]byte(bypassList), nil)
 		}
 
-		for _, it := range bypassDomains.Values() {
+		for _, it := range bypassDomains.Flatten() {
 			nUpstream := fmt.Sprintf("[/%s/]%s", it, `#`)
 			options.Upstreams = append(options.Upstreams, nUpstream)
 		}
 
 		if len(c.StringSlice("bypass-list")) > 0 {
 			// only print log if bypass-list configured
-			log.Printf("%d bypass rules configured, totally", bypassDomains.Size())
+			log.Printf("%d bypass rules configured, totally", bypassDomains.Len())
 		}
 
 		for _, u := range initSpecUpstreams {
-			for _, it := range initSpecDomains.Values() {
+			for _, it := range initSpecDomains.Flatten() {
 				options.Upstreams = append(options.Upstreams, fmt.Sprintf("[/%s/]%s", it, u))
 			}
 		}
@@ -305,8 +305,8 @@ func main() {
 			dump, _ := yaml.Marshal(&options)
 			fmt.Println(string(dump))
 		} else {
-			log.Printf("Speclist Length: %d", specDomains.Size())
-			log.Printf("Bypasslist Length: %d", bypassDomains.Size())
+			log.Printf("Speclist Length: %d", specDomains.Len())
+			log.Printf("Bypasslist Length: %d", bypassDomains.Len())
 			log.Printf("Upstream Rule Count: %d", len(options.Upstreams))
 		}
 
