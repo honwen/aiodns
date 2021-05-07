@@ -1,12 +1,15 @@
-// https://github.com/AdguardTeam/dnsproxy/blob/v0.36.0/main.go
+// https://github.com/AdguardTeam/dnsproxy/blob/v0.37.3/main.go
 
 package main
 
 import (
+	"crypto/tls"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -38,7 +41,7 @@ type Options struct {
 	ListenPorts []int `short:"p" long:"port" description:"Listening ports. Zero value disables TCP and UDP listeners" default:"53"`
 
 	// HTTPS listen ports
-	HTTPSListenPorts []int `short:"h" long:"https-port" description:"Listening ports for DNS-over-HTTPS"`
+	HTTPSListenPorts []int `short:"s" long:"https-port" description:"Listening ports for DNS-over-HTTPS"`
 
 	// TLS listen ports
 	TLSListenPorts []int `short:"t" long:"tls-port" description:"Listening ports for DNS-over-TLS"`
@@ -74,13 +77,13 @@ type Options struct {
 	// --
 
 	// DNS upstreams
-	Upstreams []string `short:"u" long:"upstream" description:"An upstream to be used (can be specified multiple times)" required:"true"`
+	Upstreams []string `short:"u" long:"upstream" description:"An upstream to be used (can be specified multiple times). You can also specify path to a file with the list of servers" required:"true"`
 
 	// Bootstrap DNS
 	BootstrapDNS []string `short:"b" long:"bootstrap" description:"Bootstrap DNS for DoH and DoT, can be specified multiple times (default: 8.8.8.8:53)"`
 
 	// Fallback DNS resolver
-	Fallbacks []string `short:"f" long:"fallback" description:"Fallback resolvers to use when regular ones are unavailable, can be specified multiple times"`
+	Fallbacks []string `short:"f" long:"fallback" description:"Fallback resolvers to use when regular ones are unavailable, can be specified multiple times. You can also specify path to a file with the list of servers"`
 
 	// If true, parallel queries to all configured upstream servers
 	AllServers bool `long:"all-servers" description:"If specified, parallel queries to all configured upstream servers are enabled" optional:"yes" optional-value:"true"`
@@ -122,6 +125,15 @@ type Options struct {
 	// Use Custom EDNS Client Address
 	EDNSAddr string `long:"edns-addr" description:"Send EDNS Client Address"`
 
+	// DNS64 settings
+	// --
+
+	// Defines whether DNS64 functionality is enabled or not
+	DNS64 bool `long:"dns64" description:"If specified, dnsproxy will act as a DNS64 server" optional:"yes" optional-value:"true"`
+
+	// DNS64Prefix defines the DNS64 prefix that dnsproxy should use when it acts as a DNS64 server
+	DNS64Prefix string `long:"dns64-prefix" description:"If specified, this is the DNS64 prefix dnsproxy will be using when it works as a DNS64 server. If not specified, dnsproxy uses the 'Well-Known Prefix' 64:ff9b::" required:"false"`
+
 	// Other settings and options
 	// --
 
@@ -144,7 +156,33 @@ type Options struct {
 // VersionString will be set through ldflags, contains current version
 var VersionString = "undefined" // nolint:gochecknoglobals
 
-const defaultTimeout = 10 * time.Second
+var defaultTimeout = 10 * time.Second
+
+// defaultDNS64Prefix is a so-called "Well-Known Prefix" for DNS64.
+// if dnsproxy operates as a DNS64 server, we'll be using it.
+const defaultDNS64Prefix = "64:ff9b::/96"
+
+// func main() {
+// 	var options Options
+// 	var parser = goFlags.NewParser(&options, goFlags.Default)
+
+// 	if len(os.Args) > 1 && os.Args[1] == "--version" {
+// 		fmt.Printf("dnsproxy version: %s\n", VersionString)
+// 		os.Exit(0)
+// 	}
+
+// 	_, err := parser.Parse()
+// 	if err != nil {
+// 		if flagsErr, ok := err.(*goFlags.Error); ok && flagsErr.Type == goFlags.ErrHelp {
+// 			os.Exit(0)
+// 		} else {
+// 			os.Exit(1)
+// 		}
+// 	}
+
+// 	log.Println("Starting the DNS proxy")
+// 	run(options)
+// }
 
 func run(options Options) {
 	if options.Verbose {
@@ -161,7 +199,10 @@ func run(options Options) {
 
 	// Prepare the proxy server
 	config := createProxyConfig(options)
-	dnsProxy := proxy.Proxy{Config: config}
+	dnsProxy := &proxy.Proxy{Config: config}
+
+	// Init DNS64 if needed
+	initDNS64(dnsProxy, options)
 
 	// Add extra handler if needed
 	if options.IPv6Disabled {
@@ -204,6 +245,7 @@ func createProxyConfig(options Options) proxy.Config {
 	initUpstreams(&config, options)
 	initEDNS(&config, options)
 	initBogusNXDomain(&config, options)
+	initTLSConfig(&config, options)
 	initDNSCryptConfig(&config, options)
 	initListenAddrs(&config, options)
 
@@ -213,7 +255,8 @@ func createProxyConfig(options Options) proxy.Config {
 // initUpstreams inits upstream-related config
 func initUpstreams(config *proxy.Config, options Options) {
 	// Init upstreams
-	upstreamConfig, err := proxy.ParseUpstreamsConfig(options.Upstreams,
+	upstreams := loadServersList(options.Upstreams)
+	upstreamConfig, err := proxy.ParseUpstreamsConfig(upstreams,
 		upstream.Options{
 			InsecureSkipVerify: options.Insecure,
 			Bootstrap:          options.BootstrapDNS,
@@ -234,7 +277,7 @@ func initUpstreams(config *proxy.Config, options Options) {
 
 	if options.Fallbacks != nil {
 		fallbacks := []upstream.Upstream{}
-		for i, f := range options.Fallbacks {
+		for i, f := range loadServersList(options.Fallbacks) {
 			fallback, err := upstream.AddressToUpstream(f, upstream.Options{Timeout: defaultTimeout})
 			if err != nil {
 				log.Fatalf("cannot parse the fallback %s (%s): %s", f, options.BootstrapDNS, err)
@@ -246,7 +289,7 @@ func initUpstreams(config *proxy.Config, options Options) {
 	}
 }
 
-// initEDNS - init EDNS-related config
+// initEDNS inits EDNS-related config
 func initEDNS(config *proxy.Config, options Options) {
 	if options.EDNSAddr != "" {
 		if options.EnableEDNSSubnet {
@@ -261,7 +304,7 @@ func initEDNS(config *proxy.Config, options Options) {
 	}
 }
 
-// initBogusNXDomain - inits BogusNXDomain structure
+// initBogusNXDomain inits BogusNXDomain structure
 func initBogusNXDomain(config *proxy.Config, options Options) {
 	if len(options.BogusNXDomain) > 0 {
 		bogusIP := []net.IP{}
@@ -277,7 +320,18 @@ func initBogusNXDomain(config *proxy.Config, options Options) {
 	}
 }
 
-// initDNSCryptConfig - inits DNSCrypt config
+// initTLSConfig inits the TLS config
+func initTLSConfig(config *proxy.Config, options Options) {
+	if options.TLSCertPath != "" && options.TLSKeyPath != "" {
+		tlsConfig, err := newTLSConfig(options.TLSCertPath, options.TLSKeyPath, options)
+		if err != nil {
+			log.Fatalf("failed to load TLS config: %s", err)
+		}
+		config.TLSConfig = tlsConfig
+	}
+}
+
+// initDNSCryptConfig inits the DNSCrypt config
 func initDNSCryptConfig(config *proxy.Config, options Options) {
 	if options.DNSCryptConfigPath == "" {
 		return
@@ -303,7 +357,7 @@ func initDNSCryptConfig(config *proxy.Config, options Options) {
 	config.DNSCryptProviderName = rc.ProviderName
 }
 
-// initListenAddrs - inits listen addrs
+// initListenAddrs inits listen addrs
 func initListenAddrs(config *proxy.Config, options Options) {
 	listenIPs := []net.IP{}
 	for _, a := range options.ListenAddrs {
@@ -363,6 +417,32 @@ func initListenAddrs(config *proxy.Config, options Options) {
 	}
 }
 
+// initDNS64 inits the DNS64 configuration for dnsproxy
+func initDNS64(p *proxy.Proxy, options Options) {
+	if !options.DNS64 {
+		return
+	}
+
+	dns64Prefix := options.DNS64Prefix
+	if dns64Prefix == "" {
+		dns64Prefix = defaultDNS64Prefix
+	}
+
+	// DNS64 prefix may be specified as a CIDR: "64:ff9b::/96"
+	ip, _, err := net.ParseCIDR(dns64Prefix)
+	if err != nil {
+		// Or it could be specified as an IP address: "64:ff9b::"
+		ip = net.ParseIP(dns64Prefix)
+	}
+
+	if ip == nil || len(ip) < net.IPv6len {
+		log.Fatalf("Invalid DNS64 prefix: %s", dns64Prefix)
+		return
+	}
+
+	p.SetNAT64Prefix(ip[:proxy.NAT64PrefixLength])
+}
+
 // IPv6 configuration
 type ipv6Configuration struct {
 	ipv6Disabled bool // If true, all AAAA requests will be replied with NoError RCode and empty answer
@@ -375,4 +455,86 @@ func (c *ipv6Configuration) handleDNSRequest(p *proxy.Proxy, ctx *proxy.DNSConte
 	}
 
 	return p.Resolve(ctx)
+}
+
+// NewTLSConfig returns a TLS config that includes a certificate
+// Use for server TLS config or when using a client certificate
+// If caPath is empty, system CAs will be used
+func newTLSConfig(certPath, keyPath string, options Options) (*tls.Config, error) {
+	// Set default TLS min/max versions
+	tlsMinVersion := tls.VersionTLS10 // Default for crypto/tls
+	tlsMaxVersion := tls.VersionTLS13 // Default for crypto/tls
+	switch options.TLSMinVersion {
+	case 1.1:
+		tlsMinVersion = tls.VersionTLS11
+	case 1.2:
+		tlsMinVersion = tls.VersionTLS12
+	case 1.3:
+		tlsMinVersion = tls.VersionTLS13
+	}
+	switch options.TLSMaxVersion {
+	case 1.0:
+		tlsMaxVersion = tls.VersionTLS10
+	case 1.1:
+		tlsMaxVersion = tls.VersionTLS11
+	case 1.2:
+		tlsMaxVersion = tls.VersionTLS12
+	}
+
+	cert, err := loadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		return nil, fmt.Errorf("could not load TLS cert: %s", err)
+	}
+
+	return &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: uint16(tlsMinVersion), MaxVersion: uint16(tlsMaxVersion)}, nil
+}
+
+// loadX509KeyPair reads and parses a public/private key pair from a pair
+// of files. The files must contain PEM encoded data. The certificate file
+// may contain intermediate certificates following the leaf certificate to
+// form a certificate chain. On successful return, Certificate.Leaf will
+// be nil because the parsed form of the certificate is not retained.
+func loadX509KeyPair(certFile, keyFile string) (tls.Certificate, error) {
+	certPEMBlock, err := ioutil.ReadFile(certFile)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	keyPEMBlock, err := ioutil.ReadFile(keyFile)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	return tls.X509KeyPair(certPEMBlock, keyPEMBlock)
+}
+
+// loadServersList loads a list of DNS servers from the specified list.
+// the thing is that the user may specify either a server address
+// or path to a file with a list of addresses. This method takes care of it,
+// reads the file, loads servers from it if needed.
+func loadServersList(sources []string) []string {
+	var servers []string
+
+	for _, source := range sources {
+		data, err := ioutil.ReadFile(source)
+		if err != nil {
+			// Ignore errors, just consider it a server address
+			// and not a file
+			servers = append(servers, source)
+		}
+
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+
+			// Ignore comments in the file
+			if line == "" ||
+				strings.HasPrefix(line, "!") ||
+				strings.HasPrefix(line, "#") {
+				continue
+			}
+
+			servers = append(servers, line)
+		}
+	}
+
+	return servers
 }

@@ -11,11 +11,13 @@ var initSpecDomains = set.New(
 
 var initSpecUpstreams = []string{
 	"tls://101.101.101.101",
-	"tls://dns.adguard.com",
+	"https://odvr.nic.cz/doh",
 	"https://doh.dns.sb/dns-query",
 	"https://dns.twnic.tw/dns-query",
 	"https://dns.adguard.com/dns-query",
 	"https://doh.opendns.com/dns-query",
+	"sdns://AQUAAAAAAAAACjguMjAuMjQ3LjIg0sJUqpYcHsoXmZb1X7yAHwg2xyN5q1J-zaiGG-Dgs7AoMi5kbnNjcnlwdC1jZXJ0LnNoaWVsZC0yLmRuc2J5Y29tb2RvLmNvbQ",
+	"sdns://AQMAAAAAAAAAFDE3Ni4xMDMuMTMwLjEzMDo1NDQzINErR_JS3PLCu_iZEIbq95zkSV2LFsigxDIuUso_OQhzIjIuZG5zY3J5cHQuZGVmYXVsdC5uczEuYWRndWFyZC5jb20",
 }
 
 const specList = `
