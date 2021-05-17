@@ -34,32 +34,6 @@ var (
 	bootUpstream    = new(cli.StringSlice)
 )
 
-func init() {
-	defaultUpstream.Set("tls://dns.pub")
-	defaultUpstream.Set("tls://223.6.6.6")
-	defaultUpstream.Set("https://doh.pub/dns-query")
-	defaultUpstream.Set("https://dns.alidns.com/dns-query")
-
-	// specUpstream.Set("quic://dns.adguard.com")
-	// specUpstream.Set("https://odvr.nic.cz/doh")
-	// specUpstream.Set("https://doh.opendns.com/dns-query")
-	specUpstream.Set("https://8.8.8.8/dns-query")
-	specUpstream.Set("https://162.159.36.1/dns-query")
-	specUpstream.Set("https://9.9.9.11:5053/dns-query")
-	specUpstream.Set("https://149.112.112.11/dns-query")
-	specUpstream.Set("sdns://AQEAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ")
-
-	fallUpstream.Set("tcp://9.9.9.11:9053")
-	fallUpstream.Set("tcp://149.112.112.11:9053")
-	fallUpstream.Set("tls://d.rubyfish.cn")
-	fallUpstream.Set("https://i.233py.com/dns-query")
-
-	bootUpstream.Set("tls://223.5.5.5")
-	bootUpstream.Set("tcp://162.14.21.56")
-	bootUpstream.Set("tcp://162.14.21.178")
-	bootUpstream.Set("114.114.115.115")
-}
-
 func cliErrorExit(c *cli.Context, err error) {
 	fmt.Printf("%+v", err)
 	cli.ShowAppHelp(c)
