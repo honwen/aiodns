@@ -99,7 +99,7 @@ func main() {
 	app.Name = "AIO DNS"
 	app.Usage = "All In One Clean DNS Solution."
 	app.Version = fmt.Sprintf("Git:[%s] (%s)", VersionString, runtime.Version())
-	// app.HideVersion = true
+
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:  "listen, l",
@@ -206,6 +206,7 @@ func main() {
 		}
 		if options.Cache {
 			options.CacheSizeBytes = 4 * 1024 * 1024 // 4M
+			options.CacheOptimistic = true           // Prefetch
 		}
 
 		options.Upstreams = c.StringSlice("upstream")
@@ -235,6 +236,32 @@ func main() {
 			log.Printf("Using build-in special list")
 			specLists = append(specLists, specList)
 			specLists = append(specLists, tldnList)
+
+			// tldn := scanDoamins([]byte(tldnList), nil)
+			// tide := scanDoamins([]byte(specList), func(s string) bool {
+			// 	for _, it := range tldn.Flatten() {
+			// 		if strings.HasSuffix(s, "."+it.(string)) {
+			// 			return true
+			// 		}
+			// 	}
+			// 	return false
+			// })
+			// for _, it := range tide.Flatten() {
+			// 	fmt.Println(it)
+			// }
+
+			// tldn := scanDoamins([]byte(tldnList), nil)
+			// tide := scanDoamins([]byte(bypassList), func(s string) bool {
+			// 	for _, it := range tldn.Flatten() {
+			// 		if strings.HasSuffix(s, "."+it.(string)) {
+			// 			return false
+			// 		}
+			// 	}
+			// 	return true
+			// })
+			// for _, it := range tide.Flatten() {
+			// 	fmt.Println(it)
+			// }
 		}
 
 		specDomains := scanDoamins([]byte(strings.Join(specLists, "\n")), nil)
@@ -288,7 +315,7 @@ func main() {
 			log.Printf("Upstream Rule Count: %d", len(options.Upstreams))
 		}
 
-		run(options)
+		run(&options)
 		return nil
 	}
 	app.Run(os.Args)
