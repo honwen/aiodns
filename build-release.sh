@@ -25,7 +25,7 @@ for os in ${OSES[@]}; do
 		suffix=""
 		if [ "$os" == "windows" ]; then
 			suffix=".exe"
-			LDFLAGS="-X main.version=$VERSION -s -w"
+			LDFLAGS="-X main.Version=$VERSION -s -w"
 		fi
 		env CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -ldflags "$LDFLAGS" -o ./release/${name}_${os}_${arch}${suffix} .
 		# if $UPX; then upx -9 ./release/${name}_${os}_${arch}${suffix}; fi

@@ -29,8 +29,8 @@ func curl(url string, resolvers []string, retry int) (data []byte, err error) {
 	}
 	bootNSs := []*upstream.Resolver{}
 	for _, it := range resolvers {
-		if b, err := upstream.AddressToUpstream(it, upstream.Options{Timeout: tcpTimeout}); err == nil {
-			if r, err := upstream.NewResolver(b.Address(), upstream.Options{Timeout: tcpTimeout}); err == nil {
+		if b, err := upstream.AddressToUpstream(it, &upstream.Options{Timeout: tcpTimeout}); err == nil {
+			if r, err := upstream.NewResolver(b.Address(), &upstream.Options{Timeout: tcpTimeout}); err == nil {
 				bootNSs = append(bootNSs, r)
 			}
 		}
