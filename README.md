@@ -37,7 +37,7 @@ USAGE:
    aiodns [global options] command [command options] [arguments...]
 
 VERSION:
-   Git:[MISSING BUILD VERSION [GIT HASH]] (go version)
+   Git:[MISSING BUILD VERSION [GIT HASH]] (dnsproxy version)(go version)
 
 COMMANDS:
    help, h  Shows a list of commands or help for one command

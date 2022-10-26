@@ -26,7 +26,7 @@ release: check-env-release
 	cd $(BASE_BUILDDIR) ; $(archiveCmd)
 
 test:
-	go test -race -v -bench=. ./...
+	CGO_ENABLED=1 go test -race -v -bench=. ./...
 
 clean:
 	go clean

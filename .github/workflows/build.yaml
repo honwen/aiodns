@@ -18,7 +18,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: ^1.18.2
+          go-version: 1.19.2
 
       - name: Prepare environment
         run: |-
@@ -26,6 +26,7 @@ jobs:
           if [[ "${RELEASE_VERSION}" != v* ]]; then RELEASE_VERSION='dev'; fi
           echo "RELEASE_VERSION=\"${RELEASE_VERSION}@${GITHUB_SHA:0:10}\"" | tee -a $GITHUB_ENV
           go mod vendor
+          go generate -x
 
       # Win
       - run: GOOS=windows GOARCH=386 VERSION=${RELEASE_VERSION} make release

@@ -166,6 +166,10 @@ func main() {
 			Usage: "If specified, Respond to A or AAAA requests only with the fastest IP address",
 		},
 		cli.BoolFlag{
+			Name:  "http3, H",
+			Usage: "If specified, Enable HTTP/3 support",
+		},
+		cli.BoolFlag{
 			Name:  "verbose, V",
 			Usage: "If specified, Verbose output",
 		},

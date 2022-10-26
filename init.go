@@ -1,6 +1,21 @@
 package main
 
-import "github.com/Workiva/go-datastructures/set"
+import (
+	_ "embed"
+
+	"github.com/Workiva/go-datastructures/set"
+)
+
+//go:generate ./update-list.sh
+
+//go:embed embed/tldnList
+var tldnList string
+
+//go:embed embed/bypassList
+var bypassList string
+
+//go:embed embed/specList
+var specList string
 
 func init() {
 	defaultUpstream.Set("tls://dns.pub")
@@ -19,7 +34,9 @@ func init() {
 
 	// fallUpstream.Set("tcp://9.9.9.11:9953")
 	fallUpstream.Set("tcp://149.112.112.11:9953")
-	fallUpstream.Set("tls://d.rubyfish.cn")
+	fallUpstream.Set("tls://rubyfish.cn")
+	fallUpstream.Set("tls://i.passcloud.xyz:5432")
+	fallUpstream.Set("tls://a.passcloud.xyz:5432")
 	fallUpstream.Set("https://i.233py.com/dns-query")
 	fallUpstream.Set("https://dns.tuna.tsinghua.edu.cn:8443/dns-query")
 

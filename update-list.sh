@@ -1,66 +1,26 @@
 #!/bin/bash
 
+set -e
+
 SRC=https://raw.githubusercontent.com/honwen/openwrt-dnsmasq-extra/master/dnsmasq-extra/files/data
 
-# init_tldn.go
-cat <<EOF >init_tldn.go
-package main
+rm -rf embed
+mkdir -p embed
 
-const tldnList = \`
-$(curl -sSL ${SRC}/tldn.gz | zcat | grep -v 'xn--')
-\`
-EOF
+cd embed
+curl -Lo bypassList.gz https://raw.githubusercontent.com/honwen/openwrt-dnsmasq-extra/master/dnsmasq-extra/files/data/direct.gz
+curl -Lo tldnList.gz https://raw.githubusercontent.com/honwen/openwrt-dnsmasq-extra/master/dnsmasq-extra/files/data/tldn.gz
+curl -Lo specList.gz https://raw.githubusercontent.com/honwen/openwrt-dnsmasq-extra/master/dnsmasq-extra/files/data/gfwlist.lite.gz
+cd -
 
-# init_spec.go
-cat <<EOF >init_spec.go
-package main
+md5sum embed/*.gz
+gzip -d embed/*.gz
 
-const specList = \`
-$(curl -sSL ${SRC}/gfwlist.gz | zcat | sed '/[0-9]$/d' | grep -v 'xn--')
-\`
-EOF
+echo "# Info: delete somesth"
+head=$(sed -ne '/router.asus.com/=' embed/bypassList | tail -n 1)
+sed "1,${head}d" -i embed/bypassList
 
-# init_bypass.go
-cat <<EOF >init_bypass.go
-package main
+sed '/^[0-9\.]*$/d' -i embed/*
+md5sum embed/*
 
-const bypassList = \`
-$(curl -sSL ${SRC}/direct.gz | zcat | sed '/^\./d' | grep -v 'xn--')
-\`
-EOF
-
-# tidy-up
-go mod tidy
-TIDY_UP=1 go run . -V 2>/dev/null | sed -n 's+#tideSpec *++p' >/tmp/tideSpec
-TIDY_UP=1 go run . -V 2>/dev/null | sed -n 's+#tideBypass *++p' >/tmp/tideBypass
-which shadowsocks-helper >/dev/null 2>&1 && {
-    shadowsocks-helper tide -i /tmp/tideSpec -o /tmp/tideSpec
-    shadowsocks-helper tide -i /tmp/tideBypass -o /tmp/tideBypass
-} || {
-    sort -u /tmp/tideSpec -o /tmp/tideSpec
-    sort -u /tmp/tideBypass -o /tmp/tideBypass
-}
-
-# Tidy: init_spec.go
-cat <<EOF >init_spec.go
-package main
-
-const specList = \`
-$(cat /tmp/tideSpec)
-\`
-EOF
-
-# Tidy: init_bypass.go
-cat <<EOF >init_bypass.go
-package main
-
-const bypassList = \`
-$(cat /tmp/tideBypass)
-\`
-EOF
-
-rm -f /tmp/tideSpec
-rm -f /tmp/tideBypass
-
-wc -l init_*.go
-go fmt .
+echo "# Info: Done"

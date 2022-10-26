@@ -1,4 +1,4 @@
-// https://github.com/AdguardTeam/dnsproxy/blob/v0.41.0/main.go
+// https://github.com/AdguardTeam/dnsproxy/blob/v0.45.4/main.go
 
 package main
 
@@ -80,6 +80,10 @@ type Options struct {
 
 	// Path to the DNSCrypt configuration file
 	DNSCryptConfigPath string `yaml:"dnscrypt-config" short:"g" long:"dnscrypt-config" description:"Path to a file with DNSCrypt configuration. You can generate one using https://github.com/ameshkov/dnscrypt"`
+
+	// HTTP3 controls whether HTTP/3 is enabled for this instance of dnsproxy.
+	// It enables HTTP/3 support for both the DoH upstreams and the DoH server.
+	HTTP3 bool `yaml:"http3" long:"http3" description:"Enable HTTP/3 support" optional:"yes" optional-value:"false"`
 
 	// Upstream DNS servers settings
 	// --
@@ -165,7 +169,7 @@ type Options struct {
 }
 
 // VersionString will be set through ldflags, contains current version
-const VersionString = "v0.43.0" // nolint:gochecknoglobals
+const VersionString = "v0.45.4" // nolint:gochecknoglobals
 
 var defaultTimeout = 10 * time.Second
 
@@ -270,6 +274,7 @@ func createProxyConfig(options *Options) proxy.Config {
 		CacheMaxTTL:     options.CacheMaxTTL,
 		CacheOptimistic: options.CacheOptimistic,
 		RefuseAny:       options.RefuseAny,
+		HTTP3:           options.HTTP3,
 		// TODO(e.burkov):  The following CIDRs are aimed to match any
 		// address.  This is not quite proper approach to be used by
 		// default so think about configuring it.
@@ -293,7 +298,18 @@ func createProxyConfig(options *Options) proxy.Config {
 func initUpstreams(config *proxy.Config, options *Options) {
 	// Init upstreams
 	upstreams := loadServersList(options.Upstreams)
+
+	httpVersions := upstream.DefaultHTTPVersions
+	if options.HTTP3 {
+		httpVersions = []upstream.HTTPVersion{
+			upstream.HTTPVersion3,
+			upstream.HTTPVersion2,
+			upstream.HTTPVersion11,
+		}
+	}
+
 	upsOpts := &upstream.Options{
+		HTTPVersions:       httpVersions,
 		InsecureSkipVerify: options.Insecure,
 		Bootstrap:          options.BootstrapDNS,
 		Timeout:            defaultTimeout,
