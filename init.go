@@ -18,7 +18,7 @@ var bypassList string
 var specList string
 
 func init() {
-	defaultUpstream.Set("tls://dns.pub")
+	defaultUpstream.Set("tls://dot.pub")
 	defaultUpstream.Set("tls://dns.alidns.com")
 	defaultUpstream.Set("https://doh.pub/dns-query")
 	defaultUpstream.Set("https://dns.alidns.com/dns-query")
@@ -35,9 +35,12 @@ func init() {
 	// fallUpstream.Set("tcp://9.9.9.11:9953")
 	fallUpstream.Set("tcp://149.112.112.11:9953")
 	fallUpstream.Set("tls://rubyfish.cn")
-	fallUpstream.Set("tls://i.passcloud.xyz:5432")
-	fallUpstream.Set("tls://a.passcloud.xyz:5432")
-	fallUpstream.Set("https://i.233py.com/dns-query")
+	fallUpstream.Set("tls://cn-east.lele233.com")
+	fallUpstream.Set("tls://cn-south.lele233.com")
+	fallUpstream.Set("https://1.15.50.48/verse")
+	fallUpstream.Set("https://106.52.218.142/verse")
+	// fallUpstream.Set("https://i.233py.com/dns-query")
+	fallUpstream.Set("tls://dns.tuna.tsinghua.edu.cn:8853")
 	fallUpstream.Set("https://dns.tuna.tsinghua.edu.cn:8443/dns-query")
 
 	bootUpstream.Set("tls://223.5.5.5")
