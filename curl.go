@@ -27,7 +27,7 @@ func curl(url string, resolvers []string, retry int) (data []byte, err error) {
 		Timeout:   tcpTimeout,
 		DualStack: true,
 	}
-	bootNSs := []*upstream.Resolver{}
+	bootNSs := []upstream.Resolver{}
 	for _, it := range resolvers {
 		if b, err := upstream.AddressToUpstream(it, &upstream.Options{Timeout: tcpTimeout}); err == nil {
 			if r, err := upstream.NewResolver(b.Address(), &upstream.Options{Timeout: tcpTimeout}); err == nil {
@@ -40,8 +40,8 @@ func curl(url string, resolvers []string, retry int) (data []byte, err error) {
 			host, port, _ := net.SplitHostPort(addr)
 			if addrs, err := upstream.LookupParallel(ctx, bootNSs, host); err == nil {
 				for _, v := range addrs {
-					if v.IP.To4() != nil || v.IP.To16() == nil {
-						addr = net.JoinHostPort(v.IP.String(), port)
+					if v.IsValid() {
+						addr = net.JoinHostPort(v.String(), port)
 						break
 					}
 				}
@@ -53,9 +53,9 @@ func curl(url string, resolvers []string, retry int) (data []byte, err error) {
 	}
 
 	request, _ := http.NewRequest("GET", url, nil)
-	if resp, err := client.Do(request); err != nil {
+	if resp, dErr := client.Do(request); err != nil {
 		if retry <= 0 {
-			return nil, err
+			return nil, dErr
 		} else {
 			return curl(url, resolvers, retry-1)
 		}
