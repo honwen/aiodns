@@ -1,4 +1,4 @@
-// https://github.com/AdguardTeam/dnsproxy/blob/v0.50.2/main.go
+// https://github.com/AdguardTeam/dnsproxy/blob/v0.54.0/main.go
 // Package main is responsible for command-line interface of dnsproxy.
 package main
 
@@ -18,7 +18,9 @@ import (
 	"github.com/AdguardTeam/dnsproxy/proxy"
 	"github.com/AdguardTeam/dnsproxy/upstream"
 	"github.com/AdguardTeam/golibs/log"
+	"github.com/AdguardTeam/golibs/mathutil"
 	"github.com/AdguardTeam/golibs/netutil"
+	"github.com/AdguardTeam/golibs/timeutil"
 	"github.com/ameshkov/dnscrypt/v2"
 	"gopkg.in/yaml.v3"
 )
@@ -110,6 +112,10 @@ type Options struct {
 	//  detected by ICMP response time or TCP connection time
 	FastestAddress bool `yaml:"fastest-addr" long:"fastest-addr" description:"Respond to A or AAAA requests only with the fastest IP address" optional:"yes" optional-value:"true"`
 
+	// Timeout for outbound DNS queries to remote upstream servers in a
+	// human-readable form.  Default is 10s.
+	Timeout timeutil.Duration `yaml:"timeout" long:"timeout" description:"Timeout for outbound DNS queries to remote upstream servers in a human-readable form" default:"10s"`
+
 	// Cache settings
 	// --
 
@@ -160,6 +166,9 @@ type Options struct {
 	// Other settings and options
 	// --
 
+	// Set Server header for the HTTPS server
+	HTTPSServerName string `yaml:"https-server-name" long:"https-server-name" description:"Set the Server header for the responses from the HTTPS server." default:"dnsproxy"`
+
 	// If true, all AAAA requests will be replied with NoError RCode and empty answer
 	IPv6Disabled bool `yaml:"ipv6-disabled" long:"ipv6-disabled" description:"If specified, all AAAA requests will be replied with NoError RCode and empty answer" optional:"yes" optional-value:"true"`
 
@@ -181,10 +190,9 @@ type Options struct {
 }
 
 // VersionString will be set through ldflags, contains current version
-const VersionString = "v0.50.2" // nolint:gochecknoglobals
+const VersionString = "v0.54.0" // nolint:gochecknoglobals
 
-var (
-	defaultTimeout      = 10 * time.Second
+const (
 	defaultLocalTimeout = 1 * time.Second
 )
 
@@ -221,10 +229,11 @@ var (
 // 	if err != nil {
 // 		if flagsErr, ok := err.(*goFlags.Error); ok && flagsErr.Type == goFlags.ErrHelp {
 // 			os.Exit(0)
-// 		} else {
-// 			os.Exit(1)
 // 		}
+
+// 		os.Exit(1)
 // 	}
+
 // 	run(options)
 // }
 
@@ -321,6 +330,7 @@ func createProxyConfig(options *Options) proxy.Config {
 		TrustedProxies:         []string{"0.0.0.0/0", "::0/0"},
 		EnableEDNSClientSubnet: options.EnableEDNSSubnet,
 		UDPBufferSize:          options.UDPBufferSize,
+		HTTPSServerName:        options.HTTPSServerName,
 		MaxGoroutines:          options.MaxGoRoutines,
 	}
 
@@ -334,6 +344,17 @@ func createProxyConfig(options *Options) proxy.Config {
 	initDNS64(&config, options)
 
 	return config
+}
+
+// containsUpstreams returns true if uc contains at least a single upstream.
+// Otherwise it's considered nil.
+//
+// TODO(e.burkov):  Think of a better way to validate the config.  Perhaps,
+// return an error from [ParseUpstreamsConfig] if no upstreams were initialized.
+func containsUpstreams(uc *proxy.UpstreamConfig) (ok bool) {
+	return len(uc.Upstreams) > 0 ||
+		len(uc.DomainReservedUpstreams) > 0 ||
+		len(uc.SpecifiedDomainUpstreams) > 0
 }
 
 // initUpstreams inits upstream-related config
@@ -351,48 +372,39 @@ func initUpstreams(config *proxy.Config, options *Options) {
 
 	var err error
 
-	upstreams := loadServersList(options.Upstreams)
+	timeout := options.Timeout.Duration
 	upsOpts := &upstream.Options{
 		HTTPVersions:       httpVersions,
 		InsecureSkipVerify: options.Insecure,
 		Bootstrap:          options.BootstrapDNS,
-		Timeout:            defaultTimeout,
+		Timeout:            timeout,
 	}
+	upstreams := loadServersList(options.Upstreams)
 	config.UpstreamConfig, err = proxy.ParseUpstreamsConfig(upstreams, upsOpts)
 	if err != nil {
 		log.Fatalf("error while parsing upstreams configuration: %s", err)
 	}
 
-	privUpstreams := loadServersList(options.PrivateRDNSUpstreams)
 	privUpsOpts := &upstream.Options{
 		HTTPVersions: httpVersions,
 		Bootstrap:    options.BootstrapDNS,
-		Timeout:      defaultLocalTimeout,
+		Timeout:      mathutil.Min(defaultLocalTimeout, timeout),
 	}
-	config.PrivateRDNSUpstreamConfig, err = proxy.ParseUpstreamsConfig(privUpstreams, privUpsOpts)
+	privUpstreams := loadServersList(options.PrivateRDNSUpstreams)
+	private, err := proxy.ParseUpstreamsConfig(privUpstreams, privUpsOpts)
 	if err != nil {
 		log.Fatalf("error while parsing private rdns upstreams configuration: %s", err)
 	}
+	if containsUpstreams(private) {
+		config.PrivateRDNSUpstreamConfig = private
+	}
 
-	if options.Fallbacks != nil {
-		fallbacks := []upstream.Upstream{}
-		for i, f := range loadServersList(options.Fallbacks) {
-			// Use the same options for fallback servers as for
-			// upstream servers until it is possible to configure it
-			// separately.
-			//
-			// See https://github.com/AdguardTeam/dnsproxy/issues/161.
-			var fallback upstream.Upstream
-			fallback, err = upstream.AddressToUpstream(f, upsOpts)
-			if err != nil {
-				log.Fatalf("cannot parse the fallback %s (%s): %s", f, options.BootstrapDNS, err)
-			}
-
-			log.Printf("fallback at index %d is %s", i, fallback.Address())
-
-			fallbacks = append(fallbacks, fallback)
-		}
-
+	fallbackUpstreams := loadServersList(options.Fallbacks)
+	fallbacks, err := proxy.ParseUpstreamsConfig(fallbackUpstreams, upsOpts)
+	if err != nil {
+		log.Fatalf("error while parsing fallback upstreams configuration: %s", err)
+	}
+	if containsUpstreams(fallbacks) {
 		config.Fallbacks = fallbacks
 	}
 

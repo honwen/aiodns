@@ -196,7 +196,7 @@ func main() {
 		}
 
 		if timeout := c.Int("timeout"); 0 < timeout && timeout < 60 {
-			defaultTimeout = time.Duration(timeout) * time.Second
+			options.Timeout.Duration = time.Duration(timeout) * time.Second
 		}
 
 		options.EDNSAddr = c.String("edns")
