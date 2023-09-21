@@ -1,4 +1,4 @@
-// https://github.com/AdguardTeam/dnsproxy/blob/v0.54.0/main.go
+// https://github.com/AdguardTeam/dnsproxy/blob/v0.55.0/main.go
 // Package main is responsible for command-line interface of dnsproxy.
 package main
 
@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	// "github.com/AdguardTeam/dnsproxy/internal/version"
 	"github.com/AdguardTeam/dnsproxy/proxy"
 	"github.com/AdguardTeam/dnsproxy/upstream"
 	"github.com/AdguardTeam/golibs/log"
@@ -28,6 +29,8 @@ import (
 // Options represents console arguments.  For further additions, please do not
 // use the default option since it will cause some problems when config files
 // are used.
+//
+// TODO(a.garipov): Consider extracting conf blocks for better fieldalignment.
 type Options struct {
 	// Configuration file path (yaml), the config path should be read without
 	// using goFlags in order not to have default values overriding yaml
@@ -96,7 +99,7 @@ type Options struct {
 	Upstreams []string `yaml:"upstream" short:"u" long:"upstream" description:"An upstream to be used (can be specified multiple times). You can also specify path to a file with the list of servers" optional:"false"`
 
 	// Bootstrap DNS
-	BootstrapDNS []string `yaml:"bootstrap" short:"b" long:"bootstrap" description:"Bootstrap DNS for DoH and DoT, can be specified multiple times (default: 8.8.8.8:53)"`
+	BootstrapDNS []string `yaml:"bootstrap" short:"b" long:"bootstrap" description:"Bootstrap DNS for DoH and DoT, can be specified multiple times (default: use system-provided)"`
 
 	// Fallback DNS resolver
 	Fallbacks []string `yaml:"fallback" short:"f" long:"fallback" description:"Fallback resolvers to use when regular ones are unavailable, can be specified multiple times. You can also specify path to a file with the list of servers"`
@@ -190,7 +193,7 @@ type Options struct {
 }
 
 // VersionString will be set through ldflags, contains current version
-const VersionString = "v0.54.0" // nolint:gochecknoglobals
+const VersionString = "v0.55.0" // nolint:gochecknoglobals
 
 const (
 	defaultLocalTimeout = 1 * time.Second
@@ -201,7 +204,8 @@ const (
 
 // 	for _, arg := range os.Args {
 // 		if arg == "--version" {
-// 			fmt.Printf("dnsproxy version: %s\n", VersionString)
+// 			fmt.Printf("dnsproxy version: %s\n", version.Version())
+
 // 			os.Exit(0)
 // 		}
 
@@ -242,11 +246,14 @@ func run(options *Options) {
 		log.SetLevel(log.DEBUG)
 	}
 	if options.LogOutput != "" {
+		// #nosec G302 -- Trust the file path that is given in the
+		// configuration.
 		file, err := os.OpenFile(options.LogOutput, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
 		if err != nil {
 			log.Fatalf("cannot create a log file: %s", err)
 		}
-		defer file.Close() //nolint
+
+		defer func() { _ = file.Close() }()
 		log.SetOutput(file)
 	}
 
@@ -346,15 +353,15 @@ func createProxyConfig(options *Options) proxy.Config {
 	return config
 }
 
-// containsUpstreams returns true if uc contains at least a single upstream.
-// Otherwise it's considered nil.
+// isEmpty returns false if uc contains at least a single upstream.  uc must not
+// be nil.
 //
 // TODO(e.burkov):  Think of a better way to validate the config.  Perhaps,
 // return an error from [ParseUpstreamsConfig] if no upstreams were initialized.
-func containsUpstreams(uc *proxy.UpstreamConfig) (ok bool) {
-	return len(uc.Upstreams) > 0 ||
-		len(uc.DomainReservedUpstreams) > 0 ||
-		len(uc.SpecifiedDomainUpstreams) > 0
+func isEmpty(uc *proxy.UpstreamConfig) (ok bool) {
+	return len(uc.Upstreams) == 0 &&
+		len(uc.DomainReservedUpstreams) == 0 &&
+		len(uc.SpecifiedDomainUpstreams) == 0
 }
 
 // initUpstreams inits upstream-related config
@@ -380,6 +387,7 @@ func initUpstreams(config *proxy.Config, options *Options) {
 		Timeout:            timeout,
 	}
 	upstreams := loadServersList(options.Upstreams)
+
 	config.UpstreamConfig, err = proxy.ParseUpstreamsConfig(upstreams, upsOpts)
 	if err != nil {
 		log.Fatalf("error while parsing upstreams configuration: %s", err)
@@ -391,11 +399,12 @@ func initUpstreams(config *proxy.Config, options *Options) {
 		Timeout:      mathutil.Min(defaultLocalTimeout, timeout),
 	}
 	privUpstreams := loadServersList(options.PrivateRDNSUpstreams)
+
 	private, err := proxy.ParseUpstreamsConfig(privUpstreams, privUpsOpts)
 	if err != nil {
 		log.Fatalf("error while parsing private rdns upstreams configuration: %s", err)
 	}
-	if containsUpstreams(private) {
+	if !isEmpty(private) {
 		config.PrivateRDNSUpstreamConfig = private
 	}
 
@@ -404,7 +413,8 @@ func initUpstreams(config *proxy.Config, options *Options) {
 	if err != nil {
 		log.Fatalf("error while parsing fallback upstreams configuration: %s", err)
 	}
-	if containsUpstreams(fallbacks) {
+
+	if !isEmpty(fallbacks) {
 		config.Fallbacks = fallbacks
 	}
 
@@ -566,7 +576,7 @@ func initDNS64(conf *proxy.Config, options *Options) {
 		return
 	}
 
-	if len(conf.PrivateRDNSUpstreamConfig.Upstreams) == 0 {
+	if conf.PrivateRDNSUpstreamConfig == nil || isEmpty(conf.PrivateRDNSUpstreamConfig) {
 		log.Fatalf("at least one private upstream must be configured to use dns64")
 	}
 
@@ -626,38 +636,48 @@ func newTLSConfig(options *Options) (*tls.Config, error) {
 		return nil, fmt.Errorf("could not load TLS cert: %s", err)
 	}
 
-	return &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: uint16(tlsMinVersion), MaxVersion: uint16(tlsMaxVersion)}, nil
+	// #nosec G402 -- TLS MinVersion is configured by user.
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   uint16(tlsMinVersion),
+		MaxVersion:   uint16(tlsMaxVersion),
+	}, nil
 }
 
-// loadX509KeyPair reads and parses a public/private key pair from a pair
-// of files. The files must contain PEM encoded data. The certificate file
-// may contain intermediate certificates following the leaf certificate to
-// form a certificate chain. On successful return, Certificate.Leaf will
-// be nil because the parsed form of the certificate is not retained.
-func loadX509KeyPair(certFile, keyFile string) (tls.Certificate, error) {
+// loadX509KeyPair reads and parses a public/private key pair from a pair of
+// files.  The files must contain PEM encoded data.  The certificate file may
+// contain intermediate certificates following the leaf certificate to form a
+// certificate chain.  On successful return, Certificate.Leaf will be nil
+// because the parsed form of the certificate is not retained.
+func loadX509KeyPair(certFile, keyFile string) (crt tls.Certificate, err error) {
+	// #nosec G304 -- Trust the file path that is given in the configuration.
 	certPEMBlock, err := os.ReadFile(certFile)
 	if err != nil {
 		return tls.Certificate{}, err
 	}
+
+	// #nosec G304 -- Trust the file path that is given in the configuration.
 	keyPEMBlock, err := os.ReadFile(keyFile)
 	if err != nil {
 		return tls.Certificate{}, err
 	}
+
 	return tls.X509KeyPair(certPEMBlock, keyPEMBlock)
 }
 
-// loadServersList loads a list of DNS servers from the specified list.
-// the thing is that the user may specify either a server address
-// or path to a file with a list of addresses. This method takes care of it,
-// reads the file, loads servers from it if needed.
+// loadServersList loads a list of DNS servers from the specified list.  The
+// thing is that the user may specify either a server address or the path to a
+// file with a list of addresses.  This method takes care of it, it reads the
+// file and loads servers from this file if needed.
 func loadServersList(sources []string) []string {
 	var servers []string
 
 	for _, source := range sources {
+		// #nosec G304 -- Trust the file path that is given in the
+		// configuration.
 		data, err := os.ReadFile(source)
 		if err != nil {
-			// Ignore errors, just consider it a server address
-			// and not a file
+			// Ignore errors, just consider it a server address and not a file.
 			servers = append(servers, source)
 		}
 
@@ -665,7 +685,7 @@ func loadServersList(sources []string) []string {
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
 
-			// Ignore comments in the file
+			// Ignore comments in the file.
 			if line == "" ||
 				strings.HasPrefix(line, "!") ||
 				strings.HasPrefix(line, "#") {
