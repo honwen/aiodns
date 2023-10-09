@@ -1,4 +1,4 @@
-// https://github.com/AdguardTeam/dnsproxy/blob/v0.55.0/main.go
+// https://github.com/AdguardTeam/dnsproxy/blob/v0.56.1/main.go
 // Package main is responsible for command-line interface of dnsproxy.
 package main
 
@@ -193,7 +193,7 @@ type Options struct {
 }
 
 // VersionString will be set through ldflags, contains current version
-const VersionString = "v0.55.0" // nolint:gochecknoglobals
+const VersionString = "v0.56.1" // nolint:gochecknoglobals
 
 const (
 	defaultLocalTimeout = 1 * time.Second
