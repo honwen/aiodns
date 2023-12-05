@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"os"
 	"regexp"
@@ -53,13 +53,13 @@ func fetch(uri string, resolvers []string) (dat []byte, err error) {
 			uri = homedir + uri[1:]
 		}
 		log.Printf("Fetching local list: [%s]", uri)
-		dat, err = ioutil.ReadFile(uri)
+		dat, err = os.ReadFile(uri)
 	}
 
 	// gunzip if needed
 	if strings.HasSuffix(uri, ".gz") {
 		if zReader, zErr := gzip.NewReader(bytes.NewReader(dat)); zErr == nil {
-			dat, _ = ioutil.ReadAll(zReader)
+			dat, _ = io.ReadAll(zReader)
 		} else {
 			err = zErr
 		}
@@ -70,6 +70,7 @@ func fetch(uri string, resolvers []string) (dat []byte, err error) {
 func scanDoamins(dat []byte, filter func(string) bool) (domains *set.Set) {
 	domains = set.New()
 	scanner := bufio.NewScanner(bytes.NewReader(dat))
+	re := regexp.MustCompile(`^(server|ipset)=/[^\/]*/`)
 	for scanner.Scan() {
 		it := strings.TrimSpace(scanner.Text())
 		for strings.HasPrefix(it, "#") {
@@ -81,7 +82,7 @@ func scanDoamins(dat []byte, filter func(string) bool) (domains *set.Set) {
 		for strings.HasSuffix(it, ".") && len(it) > 0 {
 			it = it[:len(it)-1]
 		}
-		if match, _ := regexp.MatchString(`^(server|ipset)=/[^\/]*/`, it); match {
+		if match := re.MatchString(it); match {
 			it = it[8:strings.LastIndex(it, `/`)]
 		}
 		if len(it) <= 0 || (filter != nil && filter(it)) {
@@ -130,11 +131,11 @@ func main() {
 		},
 		cli.StringSliceFlag{
 			Name:  "special-list, L",
-			Usage: "List of domains using special-upstream (can be specified multiple times)",
+			Usage: "List of domains using special-upstream (can be specified multiple times), (file path from local or net)",
 		},
 		cli.StringSliceFlag{
 			Name:  "bypass-list, B",
-			Usage: "List of domains bypass special-upstream (can be specified multiple times)",
+			Usage: "List of domains bypass special-upstream (can be specified multiple times), (file path from local or net)",
 		},
 		cli.StringFlag{
 			Name:  "edns, e",
@@ -223,7 +224,6 @@ func main() {
 		if len(c.StringSlice("special-list")) > 0 {
 			for _, it := range c.StringSlice("special-list") {
 				dat, err := fetch(it, options.BootstrapDNS)
-
 				// skip if error
 				if err != nil {
 					log.Println(err)
@@ -285,7 +285,6 @@ func main() {
 		if len(c.StringSlice("bypass-list")) > 0 {
 			for _, it := range c.StringSlice("bypass-list") {
 				dat, err := fetch(it, options.BootstrapDNS)
-
 				// skip if error
 				if err != nil {
 					log.Println(err)

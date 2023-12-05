@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"time"
@@ -10,9 +10,7 @@ import (
 	"github.com/AdguardTeam/dnsproxy/upstream"
 )
 
-var (
-	tcpTimeout = 30 * time.Second
-)
+var tcpTimeout = 30 * time.Second
 
 func curl(url string, resolvers []string, retry int) (data []byte, err error) {
 	client := &http.Client{
@@ -60,7 +58,7 @@ func curl(url string, resolvers []string, retry int) (data []byte, err error) {
 			return curl(url, resolvers, retry-1)
 		}
 	} else {
-		data, err = ioutil.ReadAll(resp.Body)
+		data, err = io.ReadAll(resp.Body)
 		resp.Body.Close()
 	}
 	return

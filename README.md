@@ -47,9 +47,9 @@ GLOBAL OPTIONS:
    --upstream value, -u value          An upstream to be default used (can be specified multiple times) (default: "tls://dns.pub", ...)
    --special-upstream value, -U value  An upstream to be special used (can be specified multiple times) (default: "https://8.8.8.8/dns-query", ...)
    --fallback value, -f value          Fallback resolvers to use when regular ones are unavailable, can be specified multiple times (default: "tcp://9.9.9.11:9953", ...)
-   --bootstrap value, -b value         Bootstrap DNS for DoH and DoT, can be specified multiple times (default: "tls://223.5.5.5", ...)
-   --special-list value, -L value      List of domains using special-upstream (can be specified multiple times)
-   --bypass-list value, -B value       List of domains bypass special-upstream (can be specified multiple times)
+   --bootstrap value, -b value         Bootstrap DNS for DoH and DoT, can be specified multiple times (default: "tls://223.5.5.5", "tls://1.12.12.12", ...)
+   --special-list value, -L value      List of domains using special-upstream (can be specified multiple times), (file path from local or net)
+   --bypass-list value, -B value       List of domains bypass special-upstream (can be specified multiple times), (file path from local or net)
    --edns value, -e value              Send EDNS Client Address to default upstreams
    --timeout value, -t value           Timeout of Each upstream, [1, 59] seconds (default: 3)
    --cache, -C                         If specified, DNS cache is enabled
@@ -57,7 +57,20 @@ GLOBAL OPTIONS:
    --ipv6-disabled, -R                 If specified, all AAAA requests will be replied with NoError RCode and empty answer
    --refuse-any, -A                    If specified, refuse ANY requests
    --fastest-addr, -F                  If specified, Respond to A or AAAA requests only with the fastest IP address
+   --http3, -H                         If specified, Enable HTTP/3 support
    --verbose, -V                       If specified, Verbose output
    --help, -h                          show help
    --version, -v                       print the version
+```
+
+### Example
+
+- use latest list-file fetching online
+```bash
+aiodns --special-list=https://raw.githubusercontent.com/honwen/openwrt-dnsmasq-extra/master/dnsmasq-extra/files/data/tldn.gz
+```
+
+- use list-file locally
+```bash
+aiodns --special-list=/data/tldn
 ```
