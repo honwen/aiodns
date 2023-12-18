@@ -1,4 +1,4 @@
-// https://github.com/AdguardTeam/dnsproxy/blob/v0.60.0/internal/netutil/netutil.go#L54
+// https://github.com/AdguardTeam/dnsproxy/blob/v0.61.0/internal/netutil/netutil.go#L51
 package netutil
 
 import (
