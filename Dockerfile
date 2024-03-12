@@ -1,20 +1,21 @@
-FROM golang:alpine as builder
-ENV CGO_ENABLED=0 \
-    GO111MODULE=on
-RUN apk add --update git curl
-ADD . $GOPATH/src/github.com/honwen/aiodns
+FROM golang:1.22 as builder
+
+WORKDIR /workdir
+
+ADD . ./
+
 RUN set -ex \
-    && cd $GOPATH/src/github.com/honwen/aiodns \
-    && go build -ldflags "-X main.VersionString=$(curl -sSL https://api.github.com/repos/honwen/aiodns/commits/master | \
+    && GOPROXY='https://mirrors.cloud.tencent.com/go/,direct' go mod download -x \
+    && go generate -x \
+    && CGO_ENABLED=0 go build -v -ldflags "-X main.VersionString=$(curl -sSL https://api.github.com/repos/honwen/aiodns/commits/master | \
             sed -n '{/sha/p; /date/p;}' | sed 's/.* \"//g' | cut -c1-10 | tr '[:lower:]' '[:upper:]' | sed 'N;s/\n/@/g' | head -1)" . \
-    && mv aiodns $GOPATH/bin/ \
-    && aiodns -v
+    && ./aiodns -v
 
 FROM chenhw2/alpine:base
 LABEL MAINTAINER honwen <https://github.com/honwen>
 
 # /usr/bin/aiodns
-COPY --from=builder /go/bin /usr/bin
+COPY --from=builder /workdir/aiodns /usr/bin
 
 USER nobody
 

@@ -8,9 +8,10 @@ rm -rf embed
 mkdir -p embed
 
 cd embed
-curl -Lo bypassList.gz https://raw.githubusercontent.com/honwen/openwrt-dnsmasq-extra/master/dnsmasq-extra/files/data/direct.gz
-curl -Lo tldnList.gz https://raw.githubusercontent.com/honwen/openwrt-dnsmasq-extra/master/dnsmasq-extra/files/data/tldn.gz
-curl -Lo specList.gz https://raw.githubusercontent.com/honwen/openwrt-dnsmasq-extra/master/dnsmasq-extra/files/data/gfwlist.lite.gz
+curl -fsSL https://raw.githubusercontent.com/honwen/openwrt-dnsmasq-extra/master/dnsmasq-extra/Makefile | sed -n 's+^PKG_VERSION:=++p' >VERSION
+curl -fsSLo bypassList.gz https://raw.githubusercontent.com/honwen/openwrt-dnsmasq-extra/master/dnsmasq-extra/files/data/direct.gz
+curl -fsSLo tldnList.gz https://raw.githubusercontent.com/honwen/openwrt-dnsmasq-extra/master/dnsmasq-extra/files/data/tldn.gz
+curl -fsSLo specList.gz https://raw.githubusercontent.com/honwen/openwrt-dnsmasq-extra/master/dnsmasq-extra/files/data/gfwlist.lite.gz
 cd -
 
 md5sum embed/*.gz

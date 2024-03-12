@@ -2,11 +2,15 @@ package main
 
 import (
 	_ "embed"
+	"strings"
 
 	"github.com/Workiva/go-datastructures/set"
 )
 
 //go:generate ./update-list.sh
+
+//go:embed embed/VERSION
+var embedDate string
 
 //go:embed embed/tldnList
 var tldnList string
@@ -18,6 +22,8 @@ var bypassList string
 var specList string
 
 func init() {
+	embedDate = strings.TrimSpace(embedDate)
+
 	defaultUpstream.Set("tls://dot.pub")
 	defaultUpstream.Set("tls://dns.alidns.com")
 	defaultUpstream.Set("https://doh.pub/dns-query")
@@ -29,19 +35,16 @@ func init() {
 	specUpstream.Set("https://8.8.8.8/dns-query")
 	specUpstream.Set("https://9.9.9.11/dns-query")
 	specUpstream.Set("https://162.159.36.1/dns-query")
+	specUpstream.Set("https://149.112.112.11/dns-query")
 	specUpstream.Set("https://149.112.112.11:5053/dns-query")
 	specUpstream.Set("sdns://AQEAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ")
+	specUpstream.Set("sdns://AQQAAAAAAAAAEDc3Ljg4LjguNzg6MTUzNTMg04TAccn3RmKvKszVe13MlxTUB7atNgHhrtwG1W1JYyciMi5kbnNjcnlwdC1jZXJ0LmJyb3dzZXIueWFuZGV4Lm5ldA")
 
 	// fallUpstream.Set("tcp://9.9.9.11:9953")
 	fallUpstream.Set("tcp://149.112.112.11:9953")
-	fallUpstream.Set("tls://rubyfish.cn")
-	fallUpstream.Set("https://cn-a.iqiqz.com/cdn")
-	// fallUpstream.Set("https://cn-b.iqiqz.com/cdn")
+	fallUpstream.Set("tls://dns.rubyfish.cn")
 	fallUpstream.Set("https://1.15.50.48/verse")
 	fallUpstream.Set("https://106.52.218.142/verse")
-	// fallUpstream.Set("https://i.233py.com/dns-query")
-	fallUpstream.Set("tls://dns.tuna.tsinghua.edu.cn:8853")
-	fallUpstream.Set("https://dns.tuna.tsinghua.edu.cn:8443/dns-query")
 
 	bootUpstream.Set("tls://223.5.5.5")
 	bootUpstream.Set("tls://1.12.12.12")

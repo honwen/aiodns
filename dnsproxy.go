@@ -1,29 +1,33 @@
-// https://github.com/AdguardTeam/dnsproxy/blob/v0.55.0/main.go
+// https://github.com/AdguardTeam/dnsproxy/blob/v0.66.0/main.go
 // Package main is responsible for command-line interface of dnsproxy.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/pprof"
 	"net/netip"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 	"time"
 
-	// "github.com/AdguardTeam/dnsproxy/internal/version"
 	"github.com/AdguardTeam/dnsproxy/proxy"
 	"github.com/AdguardTeam/dnsproxy/upstream"
 	"github.com/AdguardTeam/golibs/log"
-	"github.com/AdguardTeam/golibs/mathutil"
 	"github.com/AdguardTeam/golibs/netutil"
+	"github.com/AdguardTeam/golibs/osutil"
 	"github.com/AdguardTeam/golibs/timeutil"
 	"github.com/ameshkov/dnscrypt/v2"
 	"gopkg.in/yaml.v3"
+
+	// TODO(internal):  Move to AdguardTeam/golibs.
+	proxynetutil "github.com/honwen/aiodns/internal/netutil"
 )
 
 // Options represents console arguments.  For further additions, please do not
@@ -143,6 +147,14 @@ type Options struct {
 	// Ratelimit value
 	Ratelimit int `yaml:"ratelimit" short:"r" long:"ratelimit" description:"Ratelimit (requests per second)"`
 
+	// RatelimitSubnetLenIPv4 is a subnet length for IPv4 addresses used for
+	// rate limiting requests
+	RatelimitSubnetLenIPv4 int `yaml:"ratelimit-subnet-len-ipv4" long:"ratelimit-subnet-len-ipv4" description:"Ratelimit subnet length for IPv4." default:"24"`
+
+	// RatelimitSubnetLenIPv6 is a subnet length for IPv6 addresses used for
+	// rate limiting requests
+	RatelimitSubnetLenIPv6 int `yaml:"ratelimit-subnet-len-ipv6" long:"ratelimit-subnet-len-ipv6" description:"Ratelimit subnet length for IPv6." default:"56"`
+
 	// If true, refuse ANY requests
 	RefuseAny bool `yaml:"refuse-any" long:"refuse-any" description:"If specified, refuse ANY requests" optional:"yes" optional-value:"true"`
 
@@ -172,17 +184,26 @@ type Options struct {
 	// Set Server header for the HTTPS server
 	HTTPSServerName string `yaml:"https-server-name" long:"https-server-name" description:"Set the Server header for the responses from the HTTPS server." default:"dnsproxy"`
 
+	// HTTPSUserinfo is the sole permitted userinfo for the DoH basic
+	// authentication.  If it is set, all DoH queries are required to have this
+	// basic authentication information.
+	HTTPSUserinfo string `yaml:"https-userinfo" long:"https-userinfo" description:"If set, all DoH queries are required to have this basic authentication information."`
+
 	// If true, all AAAA requests will be replied with NoError RCode and empty answer
 	IPv6Disabled bool `yaml:"ipv6-disabled" long:"ipv6-disabled" description:"If specified, all AAAA requests will be replied with NoError RCode and empty answer" optional:"yes" optional-value:"true"`
 
-	// Transform responses that contain at least one of the given IP addresses into NXDOMAIN
+	// Transform responses that contain at least one of the given IP addresses
+	// into NXDOMAIN.
+	//
+	// TODO(a.garipov): Find a way to use [netutil.Prefix].  Currently, package
+	// go-flags doesn't support text unmarshalers.
 	BogusNXDomain []string `yaml:"bogus-nxdomain" long:"bogus-nxdomain" description:"Transform the responses containing at least a single IP that matches specified addresses and CIDRs into NXDOMAIN.  Can be specified multiple times."`
 
 	// UDP buffer size value
 	UDPBufferSize int `yaml:"udp-buf-size" long:"udp-buf-size" description:"Set the size of the UDP buffer in bytes. A value <= 0 will use the system default."`
 
-	// The maximum number of go routines
-	MaxGoRoutines int `yaml:"max-go-routines" long:"max-go-routines" description:"Set the maximum number of go routines. A value <= 0 will not not set a maximum."`
+	// MaxGoRoutines is the maximum number of goroutines.
+	MaxGoRoutines uint `yaml:"max-go-routines" long:"max-go-routines" description:"Set the maximum number of go routines. A zero value will not not set a maximum."`
 
 	// Pprof defines whether the pprof information needs to be exposed via
 	// localhost:6060 or not.
@@ -192,10 +213,9 @@ type Options struct {
 	Version bool `yaml:"version" long:"version" description:"Prints the program version"`
 }
 
-// VersionString will be set through ldflags, contains current version
-const VersionString = "v0.55.0" // nolint:gochecknoglobals
-
 const (
+	// VersionString will be set through ldflags, contains current version
+	VersionString       = "v0.66.0" // nolint:gochecknoglobals
 	defaultLocalTimeout = 1 * time.Second
 )
 
@@ -262,8 +282,12 @@ func run(options *Options) {
 	log.Info("Starting dnsproxy %s", VersionString)
 
 	// Prepare the proxy server and its configuration.
-	config := createProxyConfig(options)
-	dnsProxy := &proxy.Proxy{Config: config}
+	conf := createProxyConfig(options)
+
+	dnsProxy, err := proxy.New(conf)
+	if err != nil {
+		log.Fatalf("creating proxy: %s", err)
+	}
 
 	// Add extra handler if needed.
 	if options.IPv6Disabled {
@@ -272,7 +296,11 @@ func run(options *Options) {
 	}
 
 	// Start the proxy server.
-	err := dnsProxy.Start()
+	//
+	// TODO(e.burkov):  Use signal handler.
+	ctx := context.Background()
+
+	err = dnsProxy.Start(ctx)
 	if err != nil {
 		log.Fatalf("cannot start the DNS proxy due to %s", err)
 	}
@@ -282,7 +310,7 @@ func run(options *Options) {
 	<-signalChannel
 
 	// Stopping the proxy.
-	err = dnsProxy.Stop()
+	err = dnsProxy.Shutdown(ctx)
 	if err != nil {
 		log.Fatalf("cannot stop the DNS proxy due to %s", err)
 	}
@@ -320,9 +348,11 @@ func runPprof(options *Options) {
 }
 
 // createProxyConfig creates proxy.Config from the command line arguments
-func createProxyConfig(options *Options) proxy.Config {
-	// Create the config
-	config := proxy.Config{
+func createProxyConfig(options *Options) (conf *proxy.Config) {
+	conf = &proxy.Config{
+		RatelimitSubnetLenIPv4: options.RatelimitSubnetLenIPv4,
+		RatelimitSubnetLenIPv6: options.RatelimitSubnetLenIPv6,
+
 		Ratelimit:       options.Ratelimit,
 		CacheEnabled:    options.Cache,
 		CacheSizeBytes:  options.CacheSizeBytes,
@@ -331,26 +361,38 @@ func createProxyConfig(options *Options) proxy.Config {
 		CacheOptimistic: options.CacheOptimistic,
 		RefuseAny:       options.RefuseAny,
 		HTTP3:           options.HTTP3,
-		// TODO(e.burkov):  The following CIDRs are aimed to match any
-		// address.  This is not quite proper approach to be used by
-		// default so think about configuring it.
-		TrustedProxies:         []string{"0.0.0.0/0", "::0/0"},
+		// TODO(e.burkov):  The following CIDRs are aimed to match any address.
+		// This is not quite proper approach to be used by default so think
+		// about configuring it.
+		TrustedProxies: netutil.SliceSubnetSet{
+			netip.MustParsePrefix("0.0.0.0/0"),
+			netip.MustParsePrefix("::0/0"),
+		},
 		EnableEDNSClientSubnet: options.EnableEDNSSubnet,
 		UDPBufferSize:          options.UDPBufferSize,
 		HTTPSServerName:        options.HTTPSServerName,
 		MaxGoroutines:          options.MaxGoRoutines,
 	}
 
-	// TODO(e.burkov):  Make these methods of [Options].
-	initUpstreams(&config, options)
-	initEDNS(&config, options)
-	initBogusNXDomain(&config, options)
-	initTLSConfig(&config, options)
-	initDNSCryptConfig(&config, options)
-	initListenAddrs(&config, options)
-	initDNS64(&config, options)
+	if uiStr := options.HTTPSUserinfo; uiStr != "" {
+		user, pass, ok := strings.Cut(uiStr, ":")
+		if ok {
+			conf.Userinfo = url.UserPassword(user, pass)
+		} else {
+			conf.Userinfo = url.User(user)
+		}
+	}
 
-	return config
+	// TODO(e.burkov):  Make these methods of [Options].
+	initUpstreams(conf, options)
+	initEDNS(conf, options)
+	initBogusNXDomain(conf, options)
+	initTLSConfig(conf, options)
+	initDNSCryptConfig(conf, options)
+	initListenAddrs(conf, options)
+	initDNS64(conf, options)
+
+	return conf
 }
 
 // isEmpty returns false if uc contains at least a single upstream.  uc must not
@@ -377,13 +419,21 @@ func initUpstreams(config *proxy.Config, options *Options) {
 		}
 	}
 
-	var err error
-
 	timeout := options.Timeout.Duration
+	bootOpts := &upstream.Options{
+		HTTPVersions:       httpVersions,
+		InsecureSkipVerify: options.Insecure,
+		Timeout:            timeout,
+	}
+	boot, err := initBootstrap(options.BootstrapDNS, bootOpts)
+	if err != nil {
+		log.Fatalf("error while initializing bootstrap: %s", err)
+	}
+
 	upsOpts := &upstream.Options{
 		HTTPVersions:       httpVersions,
 		InsecureSkipVerify: options.Insecure,
-		Bootstrap:          options.BootstrapDNS,
+		Bootstrap:          boot,
 		Timeout:            timeout,
 	}
 	upstreams := loadServersList(options.Upstreams)
@@ -395,8 +445,8 @@ func initUpstreams(config *proxy.Config, options *Options) {
 
 	privUpsOpts := &upstream.Options{
 		HTTPVersions: httpVersions,
-		Bootstrap:    options.BootstrapDNS,
-		Timeout:      mathutil.Min(defaultLocalTimeout, timeout),
+		Bootstrap:    boot,
+		Timeout:      min(defaultLocalTimeout, timeout),
 	}
 	privUpstreams := loadServersList(options.PrivateRDNSUpstreams)
 
@@ -427,6 +477,39 @@ func initUpstreams(config *proxy.Config, options *Options) {
 	}
 }
 
+// initBootstrap initializes the [upstream.Resolver] for bootstrapping upstream
+// servers.  It returns the default resolver if no bootstraps were specified.
+// The returned resolver will also use system hosts files first.
+func initBootstrap(bootstraps []string, opts *upstream.Options) (r upstream.Resolver, err error) {
+	var resolvers []upstream.Resolver
+
+	for i, b := range bootstraps {
+		var ur *upstream.UpstreamResolver
+		ur, err = upstream.NewUpstreamResolver(b, opts)
+		if err != nil {
+			return nil, fmt.Errorf("creating bootstrap resolver at index %d: %w", i, err)
+		}
+
+		resolvers = append(resolvers, upstream.NewCachingResolver(ur))
+	}
+
+	switch len(resolvers) {
+	case 0:
+		etcHosts, hostsErr := upstream.NewDefaultHostsResolver(osutil.RootDirFS())
+		if hostsErr != nil {
+			log.Error("creating default hosts resolver: %s", hostsErr)
+
+			return net.DefaultResolver, nil
+		}
+
+		return upstream.ConsequentResolver{etcHosts, net.DefaultResolver}, nil
+	case 1:
+		return resolvers[0], nil
+	default:
+		return upstream.ParallelResolver(resolvers), nil
+	}
+}
+
 // initEDNS inits EDNS-related config
 func initEDNS(config *proxy.Config, options *Options) {
 	if options.EDNSAddr != "" {
@@ -448,15 +531,13 @@ func initBogusNXDomain(config *proxy.Config, options *Options) {
 		return
 	}
 
-	for _, s := range options.BogusNXDomain {
-		subnet, err := netutil.ParseSubnet(s)
+	for i, s := range options.BogusNXDomain {
+		p, err := proxynetutil.ParseSubnet(s)
 		if err != nil {
-			log.Error("%s", err)
-
-			continue
+			log.Error("parsing bogus nxdomain subnet at index %d: %s", i, err)
+		} else {
+			config.BogusNXDomain = append(config.BogusNXDomain, p)
 		}
-
-		config.BogusNXDomain = append(config.BogusNXDomain, subnet)
 	}
 }
 
@@ -499,7 +580,7 @@ func initDNSCryptConfig(config *proxy.Config, options *Options) {
 
 // initListenAddrs inits listen addrs
 func initListenAddrs(config *proxy.Config, options *Options) {
-	listenIPs := []net.IP{}
+	listenIPs := []netip.Addr{}
 
 	if len(options.ListenAddrs) == 0 {
 		// If ListenAddrs has not been parsed through config file nor command
@@ -513,22 +594,24 @@ func initListenAddrs(config *proxy.Config, options *Options) {
 		options.ListenPorts = []int{53}
 	}
 
-	for _, a := range options.ListenAddrs {
-		ip := net.ParseIP(a)
-		if ip == nil {
-			log.Fatalf("cannot parse %s", a)
+	for i, a := range options.ListenAddrs {
+		ip, err := netip.ParseAddr(a)
+		if err != nil {
+			log.Fatalf("parsing listen address at index %d: %s", i, a)
 		}
+
 		listenIPs = append(listenIPs, ip)
 	}
 
 	if len(options.ListenPorts) != 0 && options.ListenPorts[0] != 0 {
 		for _, port := range options.ListenPorts {
 			for _, ip := range listenIPs {
+				p := uint16(port)
 
-				ua := &net.UDPAddr{Port: port, IP: ip}
+				ua := net.UDPAddrFromAddrPort(netip.AddrPortFrom(ip, p))
 				config.UDPListenAddr = append(config.UDPListenAddr, ua)
 
-				ta := &net.TCPAddr{Port: port, IP: ip}
+				ta := net.TCPAddrFromAddrPort(netip.AddrPortFrom(ip, p))
 				config.TCPListenAddr = append(config.TCPListenAddr, ta)
 			}
 		}
@@ -537,21 +620,21 @@ func initListenAddrs(config *proxy.Config, options *Options) {
 	if config.TLSConfig != nil {
 		for _, port := range options.TLSListenPorts {
 			for _, ip := range listenIPs {
-				a := &net.TCPAddr{Port: port, IP: ip}
+				a := net.TCPAddrFromAddrPort(netip.AddrPortFrom(ip, uint16(port)))
 				config.TLSListenAddr = append(config.TLSListenAddr, a)
 			}
 		}
 
 		for _, port := range options.HTTPSListenPorts {
 			for _, ip := range listenIPs {
-				a := &net.TCPAddr{Port: port, IP: ip}
+				a := net.TCPAddrFromAddrPort(netip.AddrPortFrom(ip, uint16(port)))
 				config.HTTPSListenAddr = append(config.HTTPSListenAddr, a)
 			}
 		}
 
 		for _, port := range options.QUICListenPorts {
 			for _, ip := range listenIPs {
-				a := &net.UDPAddr{Port: port, IP: ip}
+				a := net.UDPAddrFromAddrPort(netip.AddrPortFrom(ip, uint16(port)))
 				config.QUICListenAddr = append(config.QUICListenAddr, a)
 			}
 		}
@@ -560,10 +643,10 @@ func initListenAddrs(config *proxy.Config, options *Options) {
 	if config.DNSCryptResolverCert != nil && config.DNSCryptProviderName != "" {
 		for _, port := range options.DNSCryptListenPorts {
 			for _, ip := range listenIPs {
-				tcp := &net.TCPAddr{Port: port, IP: ip}
+				tcp := net.TCPAddrFromAddrPort(netip.AddrPortFrom(ip, uint16(port)))
 				config.DNSCryptTCPListenAddr = append(config.DNSCryptTCPListenAddr, tcp)
 
-				udp := &net.UDPAddr{Port: port, IP: ip}
+				udp := net.UDPAddrFromAddrPort(netip.AddrPortFrom(ip, uint16(port)))
 				config.DNSCryptUDPListenAddr = append(config.DNSCryptUDPListenAddr, udp)
 			}
 		}
