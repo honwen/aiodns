@@ -1,4 +1,10 @@
-// https://github.com/AdguardTeam/dnsproxy/blob/v0.66.0/internal/netutil/netutil.go#L90
+// https://github.com/AdguardTeam/dnsproxy/blob/v0.69.0/internal/netutil/netutil.go
+
+// Package netutil contains network-related utilities common among dnsproxy
+// packages.
+//
+// TODO(a.garipov): Move improved versions of these into netutil in module
+// golibs.
 package netutil
 
 import (
@@ -6,7 +12,10 @@ import (
 	"strings"
 )
 
-// TODO(e.burkov):  Move to golibs.
+// ParseSubnet parses s either as a CIDR prefix itself, or as an IP address,
+// returning the corresponding single-IP CIDR prefix.
+//
+// TODO(e.burkov):  Replace usages with [netutil.Prefix].
 func ParseSubnet(s string) (p netip.Prefix, err error) {
 	if strings.Contains(s, "/") {
 		p, err = netip.ParsePrefix(s)
