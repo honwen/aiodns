@@ -3,8 +3,8 @@ module github.com/honwen/aiodns
 go 1.22.2
 
 require (
-	github.com/AdguardTeam/dnsproxy v0.69.0
-	github.com/AdguardTeam/golibs v0.23.0
+	github.com/AdguardTeam/dnsproxy v0.70.0
+	github.com/AdguardTeam/golibs v0.23.1
 	github.com/Workiva/go-datastructures v1.1.3
 	github.com/ameshkov/dnscrypt/v2 v2.3.0
 	github.com/urfave/cli v1.22.14
@@ -19,8 +19,8 @@ require (
 	github.com/bluele/gcache v0.0.2 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.4 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
-	github.com/google/pprof v0.0.0-20240409012703-83162a5b38cd // indirect
-	github.com/miekg/dns v1.1.58 // indirect
+	github.com/google/pprof v0.0.0-20240416155748-26353dc0451f // indirect
+	github.com/miekg/dns v1.1.59 // indirect
 	github.com/onsi/ginkgo/v2 v2.17.1 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/quic-go/qpack v0.4.0 // indirect
@@ -28,7 +28,7 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	go.uber.org/mock v0.4.0 // indirect
 	golang.org/x/crypto v0.22.0 // indirect
-	golang.org/x/exp v0.0.0-20240409090435-93d18d7e34b8 // indirect
+	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f // indirect
 	golang.org/x/mod v0.17.0 // indirect
 	golang.org/x/net v0.24.0 // indirect
 	golang.org/x/sync v0.7.0 // indirect
