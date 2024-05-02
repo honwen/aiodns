@@ -1,4 +1,4 @@
-// https://github.com/AdguardTeam/dnsproxy/blob/v0.71.0/internal/netutil/netutil.go
+// https://github.com/AdguardTeam/dnsproxy/blob/v0.71.1/internal/netutil/netutil.go
 
 // Package netutil contains network-related utilities common among dnsproxy
 // packages.
