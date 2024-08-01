@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/AdguardTeam/dnsproxy/proxy"
 	"github.com/AdguardTeam/dnsproxy/upstream"
 )
 
@@ -25,18 +26,29 @@ func curl(url string, resolvers []string, retry int) (data []byte, err error) {
 		Timeout:   tcpTimeout,
 		DualStack: true,
 	}
-	bootNSs := []upstream.Resolver{}
+	bootUpstreams := []upstream.Upstream{}
 	for _, it := range resolvers {
 		if b, err := upstream.AddressToUpstream(it, &upstream.Options{Timeout: tcpTimeout}); err == nil {
-			if r, err := upstream.NewUpstreamResolver(b.Address(), &upstream.Options{Timeout: tcpTimeout}); err == nil {
-				bootNSs = append(bootNSs, r)
-			}
+			bootUpstreams = append(bootUpstreams, b)
 		}
 	}
-	if len(bootNSs) > 0 {
+
+	if len(bootUpstreams) > 0 {
+		bootUpstreamResolver, _ := proxy.New(&proxy.Config{
+			UpstreamMode: proxy.UpstreamModeParallel,
+			UpstreamConfig: &proxy.UpstreamConfig{
+				Upstreams: bootUpstreams,
+			},
+		})
+
+		defer func() {
+			bootUpstreams = nil
+			bootUpstreamResolver = nil
+		}()
+
 		client.Transport.(*http.Transport).DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 			host, port, _ := net.SplitHostPort(addr)
-			if addrs, err := upstream.LookupParallel(ctx, bootNSs, host); err == nil {
+			if addrs, err := bootUpstreamResolver.LookupNetIP(ctx, "ip", host); err == nil {
 				for _, v := range addrs {
 					if v.IsValid() {
 						addr = net.JoinHostPort(v.String(), port)
@@ -51,9 +63,10 @@ func curl(url string, resolvers []string, retry int) (data []byte, err error) {
 	}
 
 	request, _ := http.NewRequest("GET", url, nil)
-	if resp, dErr := client.Do(request); err != nil {
+	if resp, httpErr := client.Do(request); httpErr != nil {
+		err = httpErr
 		if retry <= 0 {
-			return nil, dErr
+			return
 		} else {
 			return curl(url, resolvers, retry-1)
 		}

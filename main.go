@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"regexp"
@@ -14,7 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AdguardTeam/golibs/log"
+	"github.com/AdguardTeam/dnsproxy/proxy"
+	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/AdguardTeam/golibs/netutil"
 	"github.com/Workiva/go-datastructures/set"
 	"github.com/urfave/cli"
@@ -22,8 +25,11 @@ import (
 )
 
 var (
+	ctx     context.Context
+	slogger *slog.Logger
+
 	options = Options{
-		AllServers:       true,
+		UpstreamMode:     string(proxy.UpstreamModeParallel),
 		EnableEDNSSubnet: true,
 		TLSMinVersion:    1.2,
 	}
@@ -45,7 +51,7 @@ func cliErrorExit(c *cli.Context, err error) {
 func fetch(uri string, resolvers []string) (dat []byte, err error) {
 	// Fetch List (Online or Local)
 	if strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") {
-		log.Printf("Fetching online list: [%s]", uri)
+		slogger.InfoContext(ctx, fmt.Sprintf("fetching online list: [%s]", uri))
 		dat, err = curl(uri, resolvers, 5)
 	} else {
 		if strings.HasPrefix(uri, "~") {
@@ -56,7 +62,7 @@ func fetch(uri string, resolvers []string) (dat []byte, err error) {
 			homedir, _ := os.UserHomeDir()
 			uri = homedir + uri[5:]
 		}
-		log.Printf("Fetching local list: [%s]", uri)
+		slogger.InfoContext(ctx, fmt.Sprintf("fetching local list: [%s]", uri))
 		dat, err = os.ReadFile(uri)
 	}
 
@@ -101,11 +107,22 @@ func scanDoamins(dat []byte, filter func(string) bool) (domains *set.Set) {
 	return
 }
 
+func init() {
+	ctx = context.Background()
+
+	slogger = slogutil.New(&slogutil.Config{
+		Output:       os.Stdout,
+		Format:       slogutil.FormatDefault,
+		AddTimestamp: true,
+		Verbose:      options.Verbose,
+	})
+}
+
 func main() {
 	app := cli.NewApp()
 	app.Name = "AIO DNS"
 	app.Usage = "All In One Clean DNS Solution."
-	app.Version = fmt.Sprintf("Git:[%s](build-in-data: %s)(dnsproxy: %s)(%s)", Version, embedDate, VersionString, runtime.Version())
+	app.Version = fmt.Sprintf("Git:[%s](build in-data: %s)(dnsproxy: %s)(%s)", Version, embedDate, VersionString, runtime.Version())
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -210,8 +227,8 @@ func main() {
 		options.Insecure = c.BoolT("insecure")
 		options.RefuseAny = c.BoolT("refuse-any")
 		options.IPv6Disabled = c.BoolT("ipv6-disabled")
-		options.FastestAddress = c.BoolT("fastest-addr")
-		if options.FastestAddress {
+		if c.BoolT("fastest-addr") {
+			options.UpstreamMode = string(proxy.UpstreamModeFastestAddr)
 			options.Cache = true
 			options.CacheMinTTL = 600
 		}
@@ -230,20 +247,20 @@ func main() {
 				dat, err := fetch(it, options.BootstrapDNS)
 				// skip if error
 				if err != nil {
-					log.Println(err)
-					log.Printf("Failed; Skipped! [%s]", it)
+					slogger.InfoContext(ctx, fmt.Sprintf("%+v", err))
+					slogger.InfoContext(ctx, fmt.Sprintf("failed; skipped! [%s]", it))
 					continue
 				}
 
-				// append special-list
+				// append special list
 				specLists = append(specLists, string(dat))
-				log.Printf("%d lines special list fetched", len(strings.Split(string(dat), "\n")))
+				slogger.InfoContext(ctx, fmt.Sprintf("%d lines special list fetched", len(strings.Split(string(dat), "\n"))))
 			}
 		}
 
 		// FailSafe or Default
 		if len(specLists) <= 0 {
-			log.Printf("Using build-in special list")
+			slogger.InfoContext(ctx, "using build in special list")
 			specLists = append(specLists, specList)
 			specLists = append(specLists, tldnList)
 
@@ -291,18 +308,18 @@ func main() {
 				dat, err := fetch(it, options.BootstrapDNS)
 				// skip if error
 				if err != nil {
-					log.Println(err)
-					log.Printf("Failed; Skipped! [%s]", it)
+					slogger.InfoContext(ctx, fmt.Sprintf("%+v", err))
+					slogger.InfoContext(ctx, fmt.Sprintf("failed; skipped! [%s]", it))
 					continue
 				}
 
-				// append bypass-list
+				// append bypass list
 				bypassDomains.Add(scanDoamins(dat, nil).Flatten()...)
-				log.Printf("%d lines bypass list fetched", len(strings.Split(string(dat), "\n")))
+				slogger.InfoContext(ctx, fmt.Sprintf("%d lines bypass list fetched", len(strings.Split(string(dat), "\n"))))
 			}
-		} else if len(c.StringSlice("special-list")) < 1 {
-			// only use build-in bypassList if special-list NOT configured
-			log.Printf("Using build-in bypass list")
+		} else if len(c.StringSlice("special list")) < 1 {
+			// only use build in bypassList if special list NOT configured
+			slogger.InfoContext(ctx, "using build in bypass list")
 			bypassDomains = scanDoamins([]byte(bypassList), nil)
 		}
 
@@ -313,7 +330,7 @@ func main() {
 
 		for _, u := range initSpecUpstreams {
 			for _, it := range initSpecDomains.Flatten() {
-				// log.Println(fmt.Sprintf("[/%s/]%s", it, u))
+				// slogger.InfoContext(ctx, fmt.Sprintf("[/%s/]%s", it, u))
 				options.Upstreams = append(options.Upstreams, fmt.Sprintf("[/%s/]%s", it, u))
 			}
 		}
@@ -322,12 +339,15 @@ func main() {
 			dump, _ := yaml.Marshal(&options)
 			fmt.Println(string(dump))
 		} else {
-			log.Printf("Speclist Length: %d", specDomains.Len())
-			log.Printf("Bypasslist Length: %d", bypassDomains.Len())
-			log.Printf("Upstream Rule Count: %d", len(options.Upstreams))
+			slogger.InfoContext(ctx, fmt.Sprintf("spec list length: %d", specDomains.Len()))
+			slogger.InfoContext(ctx, fmt.Sprintf("bypass list length: %d", bypassDomains.Len()))
+			slogger.InfoContext(ctx, fmt.Sprintf("upstream rules count: %d", len(options.Upstreams)))
 		}
 
-		run(&options)
+		err := runProxy(ctx, slogger, &options)
+		if err != nil {
+			slogger.ErrorContext(ctx, "running dnsproxy", slogutil.KeyError, err)
+		}
 		return nil
 	}
 	app.Run(os.Args)
