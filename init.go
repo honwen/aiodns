@@ -33,10 +33,10 @@ func init() {
 	// specUpstream.Set("https://odvr.nic.cz/doh")
 	// specUpstream.Set("https://doh.opendns.com/dns-query")
 	specUpstream.Set("https://8.8.8.8/dns-query")
-	specUpstream.Set("https://9.9.9.11/dns-query")
+	// specUpstream.Set("https://9.9.9.11/dns-query")
 	specUpstream.Set("https://162.159.36.1/dns-query")
-	specUpstream.Set("https://149.112.112.11/dns-query")
-	specUpstream.Set("https://149.112.112.11:5053/dns-query")
+	// specUpstream.Set("https://149.112.112.11/dns-query")
+	// specUpstream.Set("https://149.112.112.11:5053/dns-query")
 	specUpstream.Set("sdns://AQEAAAAAAAAADjIwOC42Ny4yMjAuMjIwILc1EUAgbyJdPivYItf9aR6hwzzI1maNDL4Ev6vKQ_t5GzIuZG5zY3J5cHQtY2VydC5vcGVuZG5zLmNvbQ")
 	specUpstream.Set("sdns://AQQAAAAAAAAAEDc3Ljg4LjguNzg6MTUzNTMg04TAccn3RmKvKszVe13MlxTUB7atNgHhrtwG1W1JYyciMi5kbnNjcnlwdC1jZXJ0LmJyb3dzZXIueWFuZGV4Lm5ldA")
 

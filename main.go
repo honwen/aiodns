@@ -20,6 +20,7 @@ import (
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/AdguardTeam/golibs/netutil"
 	"github.com/Workiva/go-datastructures/set"
+	"github.com/honwen/aiodns/internal/cmd"
 	"github.com/urfave/cli"
 	"gopkg.in/yaml.v3"
 )
@@ -28,7 +29,7 @@ var (
 	ctx     context.Context
 	slogger *slog.Logger
 
-	options = Options{
+	options = cmd.Configuration{
 		UpstreamMode:     string(proxy.UpstreamModeParallel),
 		EnableEDNSSubnet: true,
 		TLSMinVersion:    1.2,
@@ -122,7 +123,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "AIO DNS"
 	app.Usage = "All In One Clean DNS Solution."
-	app.Version = fmt.Sprintf("Git:[%s](build in-data: %s)(dnsproxy: %s)(%s)", Version, embedDate, VersionString, runtime.Version())
+	app.Version = fmt.Sprintf("Git:[%s](build in-data: %s)(dnsproxy: %s)(%s)", Version, embedDate, cmd.Version, runtime.Version())
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -198,7 +199,7 @@ func main() {
 	}
 
 	app.Action = func(c *cli.Context) error {
-		if !strings.HasPrefix(VersionString, "undefined") {
+		if !strings.HasPrefix(cmd.Version, "undefined") {
 			fmt.Fprintf(os.Stderr, "%s %s\n", strings.ToUpper(c.App.Name), c.App.Version)
 		}
 
@@ -344,7 +345,7 @@ func main() {
 			slogger.InfoContext(ctx, fmt.Sprintf("upstream rules count: %d", len(options.Upstreams)))
 		}
 
-		err := runProxy(ctx, slogger, &options)
+		err := cmd.RunProxy(ctx, slogger, &options)
 		if err != nil {
 			slogger.ErrorContext(ctx, "running dnsproxy", slogutil.KeyError, err)
 		}
