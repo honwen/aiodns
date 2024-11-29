@@ -115,7 +115,6 @@ func init() {
 		Output:       os.Stdout,
 		Format:       slogutil.FormatDefault,
 		AddTimestamp: true,
-		Verbose:      options.Verbose,
 	})
 }
 

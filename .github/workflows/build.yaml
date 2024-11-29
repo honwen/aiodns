@@ -20,7 +20,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '1.23.1'
+          go-version: "1.23.3"
 
       - name: Prepare environment
         run: |-
@@ -38,6 +38,7 @@ jobs:
 
       # MacOS
       - run: GOOS=darwin GOARCH=amd64 VERSION=${RELEASE_VERSION} make release
+      - run: GOOS=darwin GOARCH=amd64 GOAMD64=v3 VERSION=${RELEASE_VERSION} make release
       - run: GOOS=darwin GOARCH=arm64 VERSION=${RELEASE_VERSION} make release
 
       # Linux X86/AMD64
@@ -56,6 +57,7 @@ jobs:
       # FreeBSD X86
       - run: GOOS=freebsd GOARCH=386 VERSION=${RELEASE_VERSION} make release
       - run: GOOS=freebsd GOARCH=amd64 VERSION=${RELEASE_VERSION} make release
+      - run: GOOS=freebsd GOARCH=amd64 GOAMD64=v3 VERSION=${RELEASE_VERSION} make release
 
       # FreeBSD ARM/ARM64
       - run: GOOS=freebsd GOARCH=arm GOARM=6 VERSION=${RELEASE_VERSION} make release
