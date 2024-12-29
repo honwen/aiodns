@@ -14,11 +14,11 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/AdguardTeam/dnsproxy/proxy"
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/AdguardTeam/golibs/netutil"
+	"github.com/AdguardTeam/golibs/timeutil"
 	"github.com/Workiva/go-datastructures/set"
 	"github.com/honwen/aiodns/internal/cmd"
 	"github.com/urfave/cli"
@@ -218,7 +218,7 @@ func main() {
 		}
 
 		if timeout := c.Int("timeout"); 0 < timeout && timeout < 60 {
-			options.Timeout.Duration = time.Duration(timeout) * time.Second
+			options.Timeout = timeutil.Duration(timeout)
 		}
 
 		options.EDNSAddr = c.String("edns")
