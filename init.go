@@ -29,6 +29,7 @@ func init() {
 	defaultUpstream.Set("https://doh.pub/dns-query")
 	defaultUpstream.Set("https://dns.alidns.com/dns-query")
 
+	specUpstream.Set("https://0ms.dev/dns-query")
 	// specUpstream.Set("quic://dns.adguard.com")
 	// specUpstream.Set("https://odvr.nic.cz/doh")
 	// specUpstream.Set("https://doh.opendns.com/dns-query")
@@ -42,9 +43,13 @@ func init() {
 
 	// fallUpstream.Set("tcp://9.9.9.11:9953")
 	fallUpstream.Set("tcp://149.112.112.11:9953")
-	fallUpstream.Set("tls://dns.rubyfish.cn")
-	fallUpstream.Set("https://1.15.50.48/verse")
-	fallUpstream.Set("https://106.52.218.142/verse")
+	fallUpstream.Set("https://dns.controld.com/comss")
+	fallUpstream.Set("https://101.102.103.104/dns-query")
+	fallUpstream.Set("https://max.rethinkdns.com/dns-query")
+	// fallUpstream.Set("tls://dns.rubyfish.cn")
+	// fallUpstream.Set("https://dns.rubyfish.cn/dns-query")
+	// fallUpstream.Set("https://1.15.50.48/verse")
+	// fallUpstream.Set("https://106.52.218.142/verse")
 
 	bootUpstream.Set("tls://223.5.5.5")
 	bootUpstream.Set("tls://1.12.12.12")
