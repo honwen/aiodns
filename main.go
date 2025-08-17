@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/AdguardTeam/dnsproxy/proxy"
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
@@ -164,7 +165,7 @@ func main() {
 		},
 		cli.IntFlag{
 			Name:  "timeout, t",
-			Value: 3,
+			Value: 1,
 			Usage: "Timeout of Each upstream, [1, 59] seconds",
 		},
 		cli.BoolFlag{
@@ -218,7 +219,7 @@ func main() {
 		}
 
 		if timeout := c.Int("timeout"); 0 < timeout && timeout < 60 {
-			options.Timeout = timeutil.Duration(timeout)
+			options.Timeout = timeutil.Duration(time.Duration(timeout) * time.Second)
 		}
 
 		options.EDNSAddr = c.String("edns")
