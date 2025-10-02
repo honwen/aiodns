@@ -1,1 +1,1 @@
-https://github.com/AdguardTeam/dnsproxy/blob/v0.76.1/internal
+https://github.com/AdguardTeam/dnsproxy/blob/v0.76.2/internal
