@@ -41,6 +41,8 @@ const (
 	timeoutIdx
 	cacheMinTTLIdx
 	cacheMaxTTLIdx
+	cacheOptimisticAnswerTTLIdx
+	cacheOptimisticMaxAgeIdx
 	cacheSizeBytesIdx
 	ratelimitIdx
 	ratelimitSubnetLenIPv4Idx
@@ -79,7 +81,7 @@ type commandLineOption struct {
 // binary.
 var commandLineOptions = []*commandLineOption{
 	configPathIdx: {
-		description: "YAML configuration file. Minimal working configuration in config.yaml.dist." +
+		description: "YAML Configuration file. Minimal working Configuration in config.yaml.dist." +
 			" Options passed through command line will override the ones from this file.",
 		long:      "config-path",
 		short:     "",
@@ -117,7 +119,7 @@ var commandLineOptions = []*commandLineOption{
 		valueType: "name",
 	},
 	dnsCryptConfigPathIdx: {
-		description: "Path to a file with DNSCrypt configuration. You can generate one using " +
+		description: "Path to a file with DNSCrypt Configuration. You can generate one using " +
 			"https://github.com/ameshkov/dnscrypt.",
 		long:      "dnscrypt-config",
 		short:     "g",
@@ -245,6 +247,18 @@ var commandLineOptions = []*commandLineOption{
 		long:        "cache-max-ttl",
 		short:       "",
 		valueType:   "uint32",
+	},
+	cacheOptimisticAnswerTTLIdx: {
+		description: "Default TTL value for expired answers from optimistic cache",
+		long:        "optimistic-answer-ttl",
+		short:       "",
+		valueType:   "duration",
+	},
+	cacheOptimisticMaxAgeIdx: {
+		description: "Period of time after which entries are removed from the optimistic cache",
+		long:        "optimistic-max-age",
+		short:       "",
+		valueType:   "duration",
 	},
 	cacheSizeBytesIdx: {
 		description: "Cache size (in bytes). Default: 64k.",
@@ -398,55 +412,57 @@ func parseCmdLineOptions(conf *Configuration) (err error) {
 
 	flags := flag.NewFlagSet(cmdName, flag.ContinueOnError)
 	for i, fieldPtr := range []any{
-		configPathIdx:             &conf.ConfigPath,
-		logOutputIdx:              &conf.LogOutput,
-		tlsCertPathIdx:            &conf.TLSCertPath,
-		tlsKeyPathIdx:             &conf.TLSKeyPath,
-		httpsServerNameIdx:        &conf.HTTPSServerName,
-		httpsUserinfoIdx:          &conf.HTTPSUserinfo,
-		dnsCryptConfigPathIdx:     &conf.DNSCryptConfigPath,
-		ednsAddrIdx:               &conf.EDNSAddr,
-		upstreamModeIdx:           &conf.UpstreamMode,
-		listenAddrsIdx:            &conf.ListenAddrs,
-		listenPortsIdx:            &conf.ListenPorts,
-		httpsListenPortsIdx:       &conf.HTTPSListenPorts,
-		tlsListenPortsIdx:         &conf.TLSListenPorts,
-		quicListenPortsIdx:        &conf.QUICListenPorts,
-		dnsCryptListenPortsIdx:    &conf.DNSCryptListenPorts,
-		upstreamsIdx:              &conf.Upstreams,
-		bootstrapDNSIdx:           &conf.BootstrapDNS,
-		fallbacksIdx:              &conf.Fallbacks,
-		privateRDNSUpstreamsIdx:   &conf.PrivateRDNSUpstreams,
-		dns64PrefixIdx:            &conf.DNS64Prefix,
-		privateSubnetsIdx:         &conf.PrivateSubnets,
-		bogusNXDomainIdx:          &conf.BogusNXDomain,
-		hostsFilesIdx:             &conf.HostsFiles,
-		timeoutIdx:                &conf.Timeout,
-		cacheMinTTLIdx:            &conf.CacheMinTTL,
-		cacheMaxTTLIdx:            &conf.CacheMaxTTL,
-		cacheSizeBytesIdx:         &conf.CacheSizeBytes,
-		ratelimitIdx:              &conf.Ratelimit,
-		ratelimitSubnetLenIPv4Idx: &conf.RatelimitSubnetLenIPv4,
-		ratelimitSubnetLenIPv6Idx: &conf.RatelimitSubnetLenIPv6,
-		udpBufferSizeIdx:          &conf.UDPBufferSize,
-		maxGoRoutinesIdx:          &conf.MaxGoRoutines,
-		tlsMinVersionIdx:          &conf.TLSMinVersion,
-		tlsMaxVersionIdx:          &conf.TLSMaxVersion,
-		helpIdx:                   &conf.help,
-		hostsFileEnabledIdx:       &conf.HostsFileEnabled,
-		pprofIdx:                  &conf.Pprof,
-		versionIdx:                &conf.Version,
-		verboseIdx:                &conf.Verbose,
-		insecureIdx:               &conf.Insecure,
-		ipv6DisabledIdx:           &conf.IPv6Disabled,
-		http3Idx:                  &conf.HTTP3,
-		cacheOptimisticIdx:        &conf.CacheOptimistic,
-		cacheIdx:                  &conf.Cache,
-		refuseAnyIdx:              &conf.RefuseAny,
-		enableEDNSSubnetIdx:       &conf.EnableEDNSSubnet,
-		pendingRequestsEnabledIdx: &conf.PendingRequestsEnabled,
-		dns64Idx:                  &conf.DNS64,
-		usePrivateRDNSIdx:         &conf.UsePrivateRDNS,
+		configPathIdx:               &conf.ConfigPath,
+		logOutputIdx:                &conf.LogOutput,
+		tlsCertPathIdx:              &conf.TLSCertPath,
+		tlsKeyPathIdx:               &conf.TLSKeyPath,
+		httpsServerNameIdx:          &conf.HTTPSServerName,
+		httpsUserinfoIdx:            &conf.HTTPSUserinfo,
+		dnsCryptConfigPathIdx:       &conf.DNSCryptConfigPath,
+		ednsAddrIdx:                 &conf.EDNSAddr,
+		upstreamModeIdx:             &conf.UpstreamMode,
+		listenAddrsIdx:              &conf.ListenAddrs,
+		listenPortsIdx:              &conf.ListenPorts,
+		httpsListenPortsIdx:         &conf.HTTPSListenPorts,
+		tlsListenPortsIdx:           &conf.TLSListenPorts,
+		quicListenPortsIdx:          &conf.QUICListenPorts,
+		dnsCryptListenPortsIdx:      &conf.DNSCryptListenPorts,
+		upstreamsIdx:                &conf.Upstreams,
+		bootstrapDNSIdx:             &conf.BootstrapDNS,
+		fallbacksIdx:                &conf.Fallbacks,
+		privateRDNSUpstreamsIdx:     &conf.PrivateRDNSUpstreams,
+		dns64PrefixIdx:              &conf.DNS64Prefix,
+		privateSubnetsIdx:           &conf.PrivateSubnets,
+		bogusNXDomainIdx:            &conf.BogusNXDomain,
+		hostsFilesIdx:               &conf.HostsFiles,
+		timeoutIdx:                  &conf.Timeout,
+		cacheMinTTLIdx:              &conf.CacheMinTTL,
+		cacheMaxTTLIdx:              &conf.CacheMaxTTL,
+		cacheOptimisticAnswerTTLIdx: &conf.OptimisticAnswerTTL,
+		cacheOptimisticMaxAgeIdx:    &conf.OptimisticMaxAge,
+		cacheSizeBytesIdx:           &conf.CacheSizeBytes,
+		ratelimitIdx:                &conf.Ratelimit,
+		ratelimitSubnetLenIPv4Idx:   &conf.RatelimitSubnetLenIPv4,
+		ratelimitSubnetLenIPv6Idx:   &conf.RatelimitSubnetLenIPv6,
+		udpBufferSizeIdx:            &conf.UDPBufferSize,
+		maxGoRoutinesIdx:            &conf.MaxGoRoutines,
+		tlsMinVersionIdx:            &conf.TLSMinVersion,
+		tlsMaxVersionIdx:            &conf.TLSMaxVersion,
+		helpIdx:                     &conf.help,
+		hostsFileEnabledIdx:         &conf.HostsFileEnabled,
+		pprofIdx:                    &conf.Pprof,
+		versionIdx:                  &conf.Version,
+		verboseIdx:                  &conf.Verbose,
+		insecureIdx:                 &conf.Insecure,
+		ipv6DisabledIdx:             &conf.IPv6Disabled,
+		http3Idx:                    &conf.HTTP3,
+		cacheOptimisticIdx:          &conf.CacheOptimistic,
+		cacheIdx:                    &conf.Cache,
+		refuseAnyIdx:                &conf.RefuseAny,
+		enableEDNSSubnetIdx:         &conf.EnableEDNSSubnet,
+		pendingRequestsEnabledIdx:   &conf.PendingRequestsEnabled,
+		dns64Idx:                    &conf.DNS64,
+		usePrivateRDNSIdx:           &conf.UsePrivateRDNS,
 	} {
 		addOption(flags, fieldPtr, commandLineOptions[i])
 	}

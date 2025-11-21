@@ -42,7 +42,7 @@ func createProxyConfig(
 		return nil, err
 	}
 
-	hosts, err := handler.ReadHosts(hostsFiles)
+	hosts, err := handler.ReadHosts(ctx, l, hostsFiles)
 	if err != nil {
 		return nil, fmt.Errorf("reading hosts files: %w", err)
 	}
@@ -61,14 +61,16 @@ func createProxyConfig(
 		RatelimitSubnetLenIPv4: conf.RatelimitSubnetLenIPv4,
 		RatelimitSubnetLenIPv6: conf.RatelimitSubnetLenIPv6,
 
-		Ratelimit:       conf.Ratelimit,
-		CacheEnabled:    conf.Cache,
-		CacheSizeBytes:  conf.CacheSizeBytes,
-		CacheMinTTL:     conf.CacheMinTTL,
-		CacheMaxTTL:     conf.CacheMaxTTL,
-		CacheOptimistic: conf.CacheOptimistic,
-		RefuseAny:       conf.RefuseAny,
-		HTTP3:           conf.HTTP3,
+		Ratelimit:                conf.Ratelimit,
+		CacheEnabled:             conf.Cache,
+		CacheSizeBytes:           conf.CacheSizeBytes,
+		CacheMinTTL:              conf.CacheMinTTL,
+		CacheMaxTTL:              conf.CacheMaxTTL,
+		CacheOptimisticAnswerTTL: time.Duration(conf.OptimisticAnswerTTL),
+		CacheOptimisticMaxAge:    time.Duration(conf.OptimisticMaxAge),
+		CacheOptimistic:          conf.CacheOptimistic,
+		RefuseAny:                conf.RefuseAny,
+		HTTP3:                    conf.HTTP3,
 		// TODO(e.burkov):  The following CIDRs are aimed to match any address.
 		// This is not quite proper approach to be used by default so think
 		// about configuring it.
@@ -231,7 +233,7 @@ func initBootstrap(
 
 	switch len(resolvers) {
 	case 0:
-		etcHosts, hostsErr := upstream.NewDefaultHostsResolver(osutil.RootDirFS(), l)
+		etcHosts, hostsErr := upstream.NewDefaultHostsResolver(ctx, osutil.RootDirFS(), l)
 		if hostsErr != nil {
 			l.ErrorContext(ctx, "creating default hosts resolver", slogutil.KeyError, hostsErr)
 
@@ -271,7 +273,11 @@ func (conf *Configuration) initEDNS(
 }
 
 // initBogusNXDomain inits BogusNXDomain structure.
-func (conf *Configuration) initBogusNXDomain(ctx context.Context, l *slog.Logger, config *proxy.Config) {
+func (conf *Configuration) initBogusNXDomain(
+	ctx context.Context,
+	l *slog.Logger,
+	config *proxy.Config,
+) {
 	if len(conf.BogusNXDomain) == 0 {
 		return
 	}
@@ -510,7 +516,10 @@ func loadServersList(sources []string) []string {
 
 // hostsFiles returns the list of hosts files to resolve from.  It's empty if
 // resolving from hosts files is disabled.
-func (conf *Configuration) hostsFiles(ctx context.Context, l *slog.Logger) (paths []string, err error) {
+func (conf *Configuration) hostsFiles(
+	ctx context.Context,
+	l *slog.Logger,
+) (paths []string, err error) {
 	if !conf.HostsFileEnabled {
 		l.DebugContext(ctx, "hosts files are disabled")
 
