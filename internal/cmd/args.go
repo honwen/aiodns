@@ -120,7 +120,7 @@ var commandLineOptions = []*commandLineOption{
 	},
 	dnsCryptConfigPathIdx: {
 		description: "Path to a file with DNSCrypt Configuration. You can generate one using " +
-			"https://github.com/ameshkov/dnscrypt.",
+			"https://github.com/AdguardTeam/dnscrypt.",
 		long:      "dnscrypt-config",
 		short:     "g",
 		valueType: "path",
@@ -535,8 +535,8 @@ func addOption(flags *flag.FlagSet, fieldPtr any, o *commandLineOption) {
 		defineFlagVar(flags, (*uint32Value)(fieldPtr), o)
 	case *float32:
 		defineFlagVar(flags, (*float32Value)(fieldPtr), o)
-	case *[]int:
-		defineFlagVar(flags, newIntSliceValue(fieldPtr), o)
+	case *[]uint16:
+		defineFlagVar(flags, newUInt16SliceValue(fieldPtr), o)
 	case *[]string:
 		defineFlagVar(flags, newStringSliceValue(fieldPtr), o)
 	case *timeutil.Duration:

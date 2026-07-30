@@ -1,5 +1,5 @@
 package cmd
 
 const (
-	Version = "v0.78.0" // nolint:gochecknoglobals
+	Version = "v0.83.1" // nolint:gochecknoglobals
 )

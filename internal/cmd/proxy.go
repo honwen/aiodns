@@ -12,23 +12,29 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AdguardTeam/dnscrypt"
 	"github.com/AdguardTeam/dnsproxy/proxy"
+	"github.com/AdguardTeam/dnsproxy/ratelimit"
 	"github.com/AdguardTeam/dnsproxy/upstream"
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/AdguardTeam/golibs/netutil"
 	"github.com/AdguardTeam/golibs/osutil"
-	"github.com/ameshkov/dnscrypt/v2"
 
 	"gopkg.in/yaml.v3"
 
 	// TODO(internal):  Move to AdguardTeam/golibs.
 	"github.com/honwen/aiodns/internal/dnsmsg"
-	"github.com/honwen/aiodns/internal/handler"
+	"github.com/honwen/aiodns/internal/middleware"
 	proxynetutil "github.com/honwen/aiodns/internal/netutil"
 )
 
 // TODO(e.burkov):  Use a separate type for the YAML Configuration file.
+
+// defaultHTTPTimeout is the default timeout for HTTP connections.
+//
+// TODO(a.garipov):  Consider making configurable.
+const defaultHTTPTimeout = 10 * time.Second
 
 // createProxyConfig initializes [proxy.Config].  l must not be nil.
 func createProxyConfig(
@@ -42,26 +48,43 @@ func createProxyConfig(
 		return nil, err
 	}
 
-	hosts, err := handler.ReadHosts(ctx, l, hostsFiles)
+	hosts, err := middleware.ReadHosts(ctx, l, hostsFiles)
 	if err != nil {
 		return nil, fmt.Errorf("reading hosts files: %w", err)
 	}
 
-	reqHdlr := handler.NewDefault(&handler.DefaultConfig{
-		Logger: l.With(slogutil.KeyPrefix, "default_handler"),
+	preMw := middleware.New(&middleware.Config{
+		Logger: l.With(slogutil.KeyPrefix, "pre_handler_mw"),
 		// TODO(e.burkov):  Use the configured message constructor.
 		MessageConstructor: dnsmsg.DefaultMessageConstructor{},
 		HaltIPv6:           conf.IPv6Disabled,
 		HostsFiles:         hosts,
 	})
 
+	ratelimitMw, err := conf.newRatelimitMw(l)
+	if err != nil {
+		return nil, fmt.Errorf("ratelimit mw: %w", err)
+	}
+
+	httpConf := &proxy.HTTPConfig{
+		ServerHeader: conf.HTTPSServerName,
+		ReadTimeout:  defaultHTTPTimeout,
+		WriteTimeout: defaultHTTPTimeout,
+		HTTP3Enabled: conf.HTTP3,
+	}
+
+	if uiStr := conf.HTTPSUserinfo; uiStr != "" {
+		user, pass, ok := strings.Cut(uiStr, ":")
+		if ok {
+			httpConf.Userinfo = url.UserPassword(user, pass)
+		} else {
+			httpConf.Userinfo = url.User(user)
+		}
+	}
+
 	proxyConf = &proxy.Config{
 		Logger: l.With(slogutil.KeyPrefix, proxy.LogPrefix),
 
-		RatelimitSubnetLenIPv4: conf.RatelimitSubnetLenIPv4,
-		RatelimitSubnetLenIPv6: conf.RatelimitSubnetLenIPv6,
-
-		Ratelimit:                conf.Ratelimit,
 		CacheEnabled:             conf.Cache,
 		CacheSizeBytes:           conf.CacheSizeBytes,
 		CacheMinTTL:              conf.CacheMinTTL,
@@ -70,7 +93,6 @@ func createProxyConfig(
 		CacheOptimisticMaxAge:    time.Duration(conf.OptimisticMaxAge),
 		CacheOptimistic:          conf.CacheOptimistic,
 		RefuseAny:                conf.RefuseAny,
-		HTTP3:                    conf.HTTP3,
 		// TODO(e.burkov):  The following CIDRs are aimed to match any address.
 		// This is not quite proper approach to be used by default so think
 		// about configuring it.
@@ -80,23 +102,14 @@ func createProxyConfig(
 		},
 		EnableEDNSClientSubnet: conf.EnableEDNSSubnet,
 		UDPBufferSize:          conf.UDPBufferSize,
-		HTTPSServerName:        conf.HTTPSServerName,
 		MaxGoroutines:          conf.MaxGoRoutines,
 		UsePrivateRDNS:         conf.UsePrivateRDNS,
 		PrivateSubnets:         netutil.SubnetSetFunc(netutil.IsLocallyServed),
-		RequestHandler:         reqHdlr.HandleRequest,
+		RequestHandler:         ratelimitMw.Wrap(preMw.Wrap(proxy.DefaultHandler{})),
 		PendingRequests: &proxy.PendingRequestsConfig{
 			Enabled: conf.PendingRequestsEnabled,
 		},
-	}
-
-	if uiStr := conf.HTTPSUserinfo; uiStr != "" {
-		user, pass, ok := strings.Cut(uiStr, ":")
-		if ok {
-			proxyConf.Userinfo = url.UserPassword(user, pass)
-		} else {
-			proxyConf.Userinfo = url.User(user)
-		}
+		HTTPConfig: httpConf,
 	}
 
 	conf.initBogusNXDomain(ctx, l, proxyConf)
@@ -110,6 +123,26 @@ func createProxyConfig(
 	errs = append(errs, conf.initSubnets(proxyConf))
 
 	return proxyConf, errors.Join(errs...)
+}
+
+// newRatelimitMw returns the ratelimit middleware.  In case of invalid
+// ratelimit configuration returns an error.  l must not be nil.
+func (conf *Configuration) newRatelimitMw(l *slog.Logger) (mw proxy.Middleware, err error) {
+	if conf.Ratelimit == 0 {
+		return proxy.MiddlewareFunc(proxy.PassThrough), nil
+	}
+
+	rlConf := &ratelimit.Config{
+		Logger:        l.With(slogutil.KeyPrefix, "ratelimit"),
+		Ratelimit:     conf.Ratelimit,
+		SubnetLenIPv4: conf.RatelimitSubnetLenIPv4,
+		SubnetLenIPv6: conf.RatelimitSubnetLenIPv6,
+	}
+	if err = rlConf.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+
+	return ratelimit.NewMiddleware(rlConf), nil
 }
 
 // isEmpty returns false if uc contains at least a single upstream.  uc must not
@@ -325,9 +358,19 @@ func (conf *Configuration) initDNSCryptConfig(config *proxy.Config) (err error) 
 		return fmt.Errorf("unmarshalling DNSCrypt config: %w", err)
 	}
 
-	cert, err := rc.CreateCert()
+	err = rc.Validate()
+	if err != nil {
+		return fmt.Errorf("validating DNSCrypt config: %w", err)
+	}
+
+	cert, err := rc.NewCert()
 	if err != nil {
 		return fmt.Errorf("creating DNSCrypt certificate: %w", err)
+	}
+
+	err = cert.Validate()
+	if err != nil {
+		return fmt.Errorf("validating DNSCrypt certificate: %w", err)
 	}
 
 	config.DNSCryptResolverCert = cert
@@ -373,12 +416,12 @@ func (conf *Configuration) initListenAddrs(config *proxy.Config) (err error) {
 	if len(conf.ListenPorts) == 0 {
 		// If ListenPorts has not been parsed through config file nor command
 		// line we set it to 53.
-		conf.ListenPorts = []int{53}
+		conf.ListenPorts = []uint16{53}
 	}
 
 	for _, port := range conf.ListenPorts {
 		for _, ip := range addrs {
-			addrPort := netip.AddrPortFrom(ip, uint16(port))
+			addrPort := netip.AddrPortFrom(ip, port)
 
 			config.UDPListenAddr = append(config.UDPListenAddr, net.UDPAddrFromAddrPort(addrPort))
 			config.TCPListenAddr = append(config.TCPListenAddr, net.TCPAddrFromAddrPort(addrPort))
@@ -391,25 +434,28 @@ func (conf *Configuration) initListenAddrs(config *proxy.Config) (err error) {
 	return nil
 }
 
-// initTLSListenAddrs sets up proxy Configuration TLS listen addresses.
+// initTLSListenAddrs sets up proxy Configuration TLS listen addresses.  If
+// conf.HTTPSListenPorts is not empty, proxyConf.HTTPConfig must not be nil.
 func initTLSListenAddrs(proxyConf *proxy.Config, conf *Configuration, addrs []netip.Addr) {
 	if proxyConf.TLSConfig == nil {
 		return
 	}
 
+	httpConfig := proxyConf.HTTPConfig
+
 	for _, ip := range addrs {
 		for _, port := range conf.TLSListenPorts {
-			a := net.TCPAddrFromAddrPort(netip.AddrPortFrom(ip, uint16(port)))
+			a := net.TCPAddrFromAddrPort(netip.AddrPortFrom(ip, port))
 			proxyConf.TLSListenAddr = append(proxyConf.TLSListenAddr, a)
 		}
 
 		for _, port := range conf.HTTPSListenPorts {
-			a := net.TCPAddrFromAddrPort(netip.AddrPortFrom(ip, uint16(port)))
-			proxyConf.HTTPSListenAddr = append(proxyConf.HTTPSListenAddr, a)
+			a := netip.AddrPortFrom(ip, port)
+			httpConfig.ListenAddresses = append(httpConfig.ListenAddresses, a)
 		}
 
 		for _, port := range conf.QUICListenPorts {
-			a := net.UDPAddrFromAddrPort(netip.AddrPortFrom(ip, uint16(port)))
+			a := net.UDPAddrFromAddrPort(netip.AddrPortFrom(ip, port))
 			proxyConf.QUICListenAddr = append(proxyConf.QUICListenAddr, a)
 		}
 	}
@@ -423,10 +469,8 @@ func initDNSCryptListenAddrs(proxyConf *proxy.Config, conf *Configuration, addrs
 	}
 
 	for _, port := range conf.DNSCryptListenPorts {
-		p := uint16(port)
-
 		for _, ip := range addrs {
-			addrPort := netip.AddrPortFrom(ip, p)
+			addrPort := netip.AddrPortFrom(ip, port)
 
 			tcp := net.TCPAddrFromAddrPort(addrPort)
 			proxyConf.DNSCryptTCPListenAddr = append(proxyConf.DNSCryptTCPListenAddr, tcp)

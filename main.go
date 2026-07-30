@@ -211,8 +211,8 @@ func main() {
 			} else {
 				options.ListenAddrs = append(options.ListenAddrs, "0.0.0.0")
 			}
-			if portInt, err := strconv.Atoi(port); err == nil {
-				options.ListenPorts = append(options.ListenPorts, portInt)
+			if portInt, err := strconv.ParseUint(port, 10, 16); err == nil {
+				options.ListenPorts = append(options.ListenPorts, uint16(portInt))
 			} else {
 				cliErrorExit(c, err)
 			}
