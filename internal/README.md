@@ -1,7 +1,7 @@
 # Vendored internal packages
 
 Most packages in this directory are **verbatim copies** of the same-named
-internal packages of [AdguardTeam/dnsproxy](https://github.com/AdguardTeam/dnsproxy/tree/v0.83.1/internal),
+internal packages of [AdguardTeam/dnsproxy](https://github.com/AdguardTeam/dnsproxy/tree/v0.86.0/internal),
 kept in sync mechanically by [`update.sh`](./update.sh):
 
 - `dnsmsg`
@@ -20,7 +20,7 @@ upstream diff as a guide when it changes.
 ./internal/update.sh
 
 # Sync with a specific release:
-./internal/update.sh v0.83.1
+./internal/update.sh v0.86.0
 ```
 
 The script mirrors the verbatim files, stamps `cmd/const.go`, runs

@@ -28,7 +28,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 readonly MODULE='github.com/AdguardTeam/dnsproxy'
-readonly PROXY_BASE='https://proxy.golang.org/github.com/!adguard!team/dnsproxy'
 
 # SYNC_FILES lists the files mirrored verbatim from the upstream module.
 readonly SYNC_FILES='
@@ -52,20 +51,28 @@ die() {
 
 # mod_dir prints the local module cache directory of $MODULE at version $1,
 # downloading it if necessary.
+#
+# go list -m fills in .Dir only for modules already extracted into the cache;
+# for any other version it prints nothing and still exits 0, so download
+# first (a no-op when the module is already cached).
 mod_dir() {
 	local ver="$1"
 	local dir
-	dir="$(go list -m -f '{{.Dir}}' "${MODULE}@${ver}" 2>/dev/null)" \
+
+	go mod download "${MODULE}@${ver}" 2>/dev/null \
+		|| die "cannot download ${MODULE}@${ver}"
+
+	dir="$(go list -m -f '{{.Dir}}' "${MODULE}@${ver}")" \
 		|| die "cannot resolve ${MODULE}@${ver}"
 	[[ -d $dir ]] || die "module directory not found for ${MODULE}@${ver}"
 
 	printf '%s\n' "$dir"
 }
 
-# latest_version queries the Go module proxy for the latest release version.
+# latest_version prints the latest release version of $MODULE, honouring the
+# module proxy configuration (GOPROXY) of the environment.
 latest_version() {
-	curl -sSf --max-time 30 "${PROXY_BASE}/@latest" \
-		| sed -n 's/.*"Version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+	go list -m -f '{{.Version}}' "${MODULE}@latest" 2>/dev/null
 }
 
 old_ver="$(go list -m -f '{{.Version}}' "$MODULE")" \
@@ -73,7 +80,7 @@ old_ver="$(go list -m -f '{{.Version}}' "$MODULE")" \
 
 new_ver="${1:-}"
 if [[ -z $new_ver ]]; then
-	log "resolving latest ${MODULE} version from proxy.golang.org"
+	log "resolving latest ${MODULE} version from the module proxy"
 	new_ver="$(latest_version)" || die "cannot resolve latest version; pass it explicitly"
 	[[ -n $new_ver ]] || die "cannot resolve latest version; pass it explicitly"
 fi
@@ -106,7 +113,12 @@ log "synced $(echo "$SYNC_FILES" | wc -w) verbatim files"
 sed -i "s/^\(	Version = \)\"[^\"]*\"/\1\"${new_ver}\"/" internal/cmd/const.go
 grep -q "\"${new_ver}\"" internal/cmd/const.go \
 	|| die "failed to stamp version into internal/cmd/const.go"
-sed -i "s|dnsproxy/blob/[^/]*/internal|dnsproxy/blob/${new_ver}/internal|" internal/README.md
+# internal/README.md points at the upstream tree and shows the sync command;
+# both carry the version.  Upstream links may use /tree/ or /blob/.
+sed -i -E "s,dnsproxy/(tree|blob)/[^/]*/internal,dnsproxy/tree/${new_ver}/internal," internal/README.md
+sed -i -E "s,(update\.sh )v[0-9]+\.[0-9]+\.[0-9]+,\1${new_ver}," internal/README.md
+grep -q "dnsproxy/tree/${new_ver}/internal" internal/README.md \
+	|| warn "internal/README.md not stamped with ${new_ver}; check its upstream link"
 
 # 3. Bump the dependency and tidy.
 log "go get ${MODULE}@${new_ver}"
